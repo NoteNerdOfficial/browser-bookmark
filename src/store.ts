@@ -3,6 +3,7 @@ import {
 	type TreeNode,
 	type BrowserBookmarkData,
 	type BrowserBookmarkSettings,
+	type BookmarkIconType,
 	DEFAULT_DATA,
 	DEFAULT_SETTINGS,
 	generateId,
@@ -67,7 +68,13 @@ export class BookmarkStore {
 		return siblings.length > 0 ? Math.max(...siblings.map((s) => s.order)) + 1 : 0;
 	}
 
-	async addBookmark(title: string, url: string, parentId: string | null = null): Promise<TreeNode> {
+	async addBookmark(
+		title: string,
+		url: string,
+		parentId: string | null = null,
+		iconType?: BookmarkIconType,
+		iconValue?: string
+	): Promise<TreeNode> {
 		const node: TreeNode = {
 			id: generateId(),
 			type: 'bookmark',
@@ -75,6 +82,8 @@ export class BookmarkStore {
 			url,
 			parentId,
 			order: this.nextOrder(parentId),
+			iconType,
+			iconValue,
 		};
 		this.data.items.push(node);
 		await this.save();
@@ -137,11 +146,19 @@ export class BookmarkStore {
 		this.notify();
 	}
 
-	async updateBookmark(id: string, title: string, url: string): Promise<void> {
+	async updateBookmark(
+		id: string,
+		title: string,
+		url: string,
+		iconType?: BookmarkIconType,
+		iconValue?: string
+	): Promise<void> {
 		const node = this.data.items.find((i) => i.id === id);
 		if (!node) return;
 		node.title = title;
 		node.url = url;
+		node.iconType = iconType;
+		node.iconValue = iconValue;
 		await this.save();
 		this.notify();
 	}

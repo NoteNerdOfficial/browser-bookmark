@@ -102,14 +102,16 @@ var BookmarkStore = class {
     const siblings = this.children(parentId);
     return siblings.length > 0 ? Math.max(...siblings.map((s) => s.order)) + 1 : 0;
   }
-  async addBookmark(title, url, parentId = null) {
+  async addBookmark(title, url, parentId = null, iconType, iconValue) {
     const node = {
       id: generateId(),
       type: "bookmark",
       title,
       url,
       parentId,
-      order: this.nextOrder(parentId)
+      order: this.nextOrder(parentId),
+      iconType,
+      iconValue
     };
     this.data.items.push(node);
     await this.save();
@@ -165,12 +167,14 @@ var BookmarkStore = class {
     await this.save();
     this.notify();
   }
-  async updateBookmark(id, title, url) {
+  async updateBookmark(id, title, url, iconType, iconValue) {
     const node = this.data.items.find((i) => i.id === id);
     if (!node)
       return;
     node.title = title;
     node.url = url;
+    node.iconType = iconType;
+    node.iconValue = iconValue;
     await this.save();
     this.notify();
   }
@@ -514,13 +518,15 @@ function parseArcSidebarJson(json) {
 var import_obsidian3 = require("obsidian");
 var BookmarkEditModal = class extends import_obsidian3.Modal {
   constructor(app, heading, initial, onSubmit, findDuplicateTitle) {
-    var _a, _b;
+    var _a, _b, _c, _d;
     super(app);
     this.heading = heading;
     this.onSubmit = onSubmit;
     this.findDuplicateTitle = findDuplicateTitle;
     this.title_ = (_a = initial.title) != null ? _a : "";
     this.url = (_b = initial.url) != null ? _b : "";
+    this.iconType = (_c = initial.iconType) != null ? _c : "auto";
+    this.iconValue = (_d = initial.iconValue) != null ? _d : "";
   }
   onOpen() {
     const { contentEl } = this;
@@ -545,6 +551,52 @@ var BookmarkEditModal = class extends import_obsidian3.Modal {
       warningEl.toggleClass("is-visible", Boolean(existing));
     };
     updateWarning();
+    let updateIconUi = () => {
+    };
+    new import_obsidian3.Setting(contentEl).setName("Icon").setDesc("Auto uses the site's favicon.").addDropdown(
+      (dropdown) => dropdown.addOption("auto", "Auto (favicon)").addOption("lucide", "Icon name").addOption("image", "Image URL").setValue(this.iconType).onChange((value) => {
+        this.iconType = value;
+        updateIconUi();
+      })
+    );
+    let iconValueInputEl;
+    const iconValueSetting = new import_obsidian3.Setting(contentEl).addText((text) => {
+      text.setValue(this.iconValue).onChange((value) => {
+        this.iconValue = value;
+        updateIconUi();
+      });
+      iconValueInputEl = text.inputEl;
+    });
+    const previewEl = contentEl.createDiv({ cls: "browser-bookmark-icon-preview" });
+    updateIconUi = () => {
+      const isAuto = this.iconType === "auto";
+      iconValueSetting.settingEl.toggleClass("browser-bookmark-hidden", isAuto);
+      if (this.iconType === "lucide") {
+        iconValueSetting.setName("Icon name");
+        iconValueInputEl.placeholder = "e.g. star, bookmark, book-marked";
+      } else if (this.iconType === "image") {
+        iconValueSetting.setName("Image URL");
+        iconValueInputEl.placeholder = "https://example.com/icon.png";
+      }
+      previewEl.empty();
+      const value = this.iconValue.trim();
+      if (isAuto || !value)
+        return;
+      if (this.iconType === "lucide") {
+        (0, import_obsidian3.setIcon)(previewEl, value);
+      } else {
+        const img = previewEl.createEl("img", { attr: { src: value } });
+        img.addEventListener(
+          "error",
+          () => {
+            img.remove();
+            previewEl.setText("Could not load that image.");
+          },
+          { once: true }
+        );
+      }
+    };
+    updateIconUi();
     new import_obsidian3.Setting(contentEl).addButton(
       (btn) => btn.setButtonText("Save").setCta().onClick(() => {
         const trimmedUrl = this.url.trim();
@@ -553,7 +605,14 @@ var BookmarkEditModal = class extends import_obsidian3.Modal {
           return;
         }
         const trimmedTitle = this.title_.trim() || trimmedUrl;
-        this.onSubmit({ title: trimmedTitle, url: trimmedUrl });
+        const trimmedIconValue = this.iconValue.trim();
+        const useCustomIcon = this.iconType !== "auto" && Boolean(trimmedIconValue);
+        this.onSubmit({
+          title: trimmedTitle,
+          url: trimmedUrl,
+          iconType: useCustomIcon ? this.iconType : void 0,
+          iconValue: useCustomIcon ? trimmedIconValue : void 0
+        });
         this.close();
       })
     );
@@ -833,7 +892,7 @@ var BookmarkListView = class extends import_obsidian6.ItemView {
   }
   renderBookmark(parentEl, node, depth) {
     const row = this.renderRowShell(parentEl, node, depth, "browser-bookmark-link-row");
-    this.renderFavicon(row, node.url);
+    this.renderFavicon(row, node);
     const title = row.createSpan({ cls: "browser-bookmark-title" });
     title.setText(node.title);
     this.wireRename(title, node);
@@ -846,10 +905,30 @@ var BookmarkListView = class extends import_obsidian6.ItemView {
       this.showBookmarkMenu(node, evt);
     });
   }
-  /** Shows the site's real favicon, falling back to a generic globe icon on any failure. */
-  renderFavicon(row, url) {
+  /**
+   * Shows, in order: a custom Lucide icon or custom image (set via the edit
+   * modal), then the site's real favicon, then a generic globe icon as the
+   * final fallback on any failure.
+   */
+  renderFavicon(row, node) {
     const box = row.createDiv({ cls: "browser-bookmark-favicon" });
-    const domain = this.store.settings.showFavicons ? this.extractDomain(url) : null;
+    if (node.iconType === "lucide" && node.iconValue) {
+      (0, import_obsidian6.setIcon)(box, node.iconValue);
+      return;
+    }
+    if (node.iconType === "image" && node.iconValue) {
+      const img2 = box.createEl("img", { cls: "browser-bookmark-favicon-img", attr: { src: node.iconValue } });
+      img2.addEventListener(
+        "error",
+        () => {
+          img2.remove();
+          (0, import_obsidian6.setIcon)(box, "globe");
+        },
+        { once: true }
+      );
+      return;
+    }
+    const domain = this.store.settings.showFavicons ? this.extractDomain(node.url) : null;
     if (!domain) {
       (0, import_obsidian6.setIcon)(box, "globe");
       return;
@@ -890,7 +969,7 @@ var BookmarkListView = class extends import_obsidian6.ItemView {
       cls: "browser-bookmark-pinned-btn",
       attr: { draggable: "true", title: node.title, "data-node-id": node.id }
     });
-    this.renderFavicon(btn, node.url);
+    this.renderFavicon(btn, node);
     btn.addEventListener("click", () => {
       var _a;
       return void openBookmark(this.app, (_a = node.url) != null ? _a : "", this.store.settings.openIn);
@@ -1080,8 +1159,8 @@ var BookmarkListView = class extends import_obsidian6.ItemView {
           this.app,
           "Edit bookmark",
           node,
-          ({ title, url }) => {
-            void this.store.updateBookmark(node.id, title, url);
+          ({ title, url, iconType, iconValue }) => {
+            void this.store.updateBookmark(node.id, title, url, iconType, iconValue);
           },
           (url) => {
             var _a;
@@ -1127,8 +1206,8 @@ var BookmarkListView = class extends import_obsidian6.ItemView {
       this.app,
       "New bookmark",
       active != null ? active : {},
-      ({ title, url }) => {
-        void this.store.addBookmark(title, url, parentId);
+      ({ title, url, iconType, iconValue }) => {
+        void this.store.addBookmark(title, url, parentId, iconType, iconValue);
       },
       (url) => {
         var _a;
@@ -1538,8 +1617,8 @@ var BrowserBookmarkPlugin = class extends import_obsidian8.Plugin {
       this.app,
       "Bookmark current page",
       active,
-      ({ title, url }) => {
-        void this.store.addBookmark(title, url, null);
+      ({ title, url, iconType, iconValue }) => {
+        void this.store.addBookmark(title, url, null, iconType, iconValue);
       },
       (url) => {
         var _a2;

@@ -273,6 +273,28 @@
 	margin: -8px 0 8px;
 }
 
+.browser-bookmark-hidden {
+	display: none;
+}
+
+.browser-bookmark-icon-preview {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	margin: -8px 0 12px;
+	color: var(--text-muted);
+	font-size: 11px;
+}
+
+.browser-bookmark-icon-preview img {
+	width: 24px;
+	height: 24px;
+	object-fit: contain;
+	border-radius: 3px;
+}
+
 .browser-bookmark-modal-warning.is-visible {
 	display: block;
 }

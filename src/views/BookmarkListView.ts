@@ -237,7 +237,7 @@ export class BookmarkListView extends ItemView {
 	private renderBookmark(parentEl: HTMLElement, node: TreeNode, depth: number): void {
 		const row = this.renderRowShell(parentEl, node, depth, 'browser-bookmark-link-row');
 
-		this.renderFavicon(row, node.url);
+		this.renderFavicon(row, node);
 
 		const title = row.createSpan({ cls: 'browser-bookmark-title' });
 		title.setText(node.title);
@@ -250,10 +250,32 @@ export class BookmarkListView extends ItemView {
 		});
 	}
 
-	/** Shows the site's real favicon, falling back to a generic globe icon on any failure. */
-	private renderFavicon(row: HTMLElement, url: string | undefined): void {
+	/**
+	 * Shows, in order: a custom Lucide icon or custom image (set via the edit
+	 * modal), then the site's real favicon, then a generic globe icon as the
+	 * final fallback on any failure.
+	 */
+	private renderFavicon(row: HTMLElement, node: TreeNode): void {
 		const box = row.createDiv({ cls: 'browser-bookmark-favicon' });
-		const domain = this.store.settings.showFavicons ? this.extractDomain(url) : null;
+
+		if (node.iconType === 'lucide' && node.iconValue) {
+			setIcon(box, node.iconValue);
+			return;
+		}
+		if (node.iconType === 'image' && node.iconValue) {
+			const img = box.createEl('img', { cls: 'browser-bookmark-favicon-img', attr: { src: node.iconValue } });
+			img.addEventListener(
+				'error',
+				() => {
+					img.remove();
+					setIcon(box, 'globe');
+				},
+				{ once: true }
+			);
+			return;
+		}
+
+		const domain = this.store.settings.showFavicons ? this.extractDomain(node.url) : null;
 		if (!domain) {
 			setIcon(box, 'globe');
 			return;
@@ -296,7 +318,7 @@ export class BookmarkListView extends ItemView {
 			cls: 'browser-bookmark-pinned-btn',
 			attr: { draggable: 'true', title: node.title, 'data-node-id': node.id },
 		});
-		this.renderFavicon(btn, node.url);
+		this.renderFavicon(btn, node);
 		btn.addEventListener('click', () => void openBookmark(this.app, node.url ?? '', this.store.settings.openIn));
 		btn.addEventListener('contextmenu', (evt) => {
 			evt.preventDefault();
@@ -479,8 +501,8 @@ export class BookmarkListView extends ItemView {
 					this.app,
 					'Edit bookmark',
 					node,
-					({ title, url }) => {
-						void this.store.updateBookmark(node.id, title, url);
+					({ title, url, iconType, iconValue }) => {
+						void this.store.updateBookmark(node.id, title, url, iconType, iconValue);
 					},
 					(url) => this.store.findByUrl(url, node.id)?.title
 				).open();
@@ -526,8 +548,8 @@ export class BookmarkListView extends ItemView {
 			this.app,
 			'New bookmark',
 			active ?? {},
-			({ title, url }) => {
-				void this.store.addBookmark(title, url, parentId);
+			({ title, url, iconType, iconValue }) => {
+				void this.store.addBookmark(title, url, parentId, iconType, iconValue);
 			},
 			(url) => this.store.findByUrl(url)?.title
 		).open();

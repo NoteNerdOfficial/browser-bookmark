@@ -1,5 +1,8 @@
 export type NodeType = 'bookmark' | 'folder';
 
+/** Bookmarks only. Absent/undefined means the auto-fetched favicon. */
+export type BookmarkIconType = 'lucide' | 'image';
+
 export interface TreeNode {
 	id: string;
 	type: NodeType;
@@ -11,6 +14,10 @@ export interface TreeNode {
 	order: number;
 	/** Folders only. */
 	collapsed?: boolean;
+	/** Bookmarks only. Undefined means auto favicon. */
+	iconType?: BookmarkIconType;
+	/** Bookmarks only. A Lucide icon name or an image URL, depending on `iconType`. */
+	iconValue?: string;
 }
 
 export type PaneType = 'tab' | 'split' | 'window';

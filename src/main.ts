@@ -72,8 +72,8 @@ export default class BrowserBookmarkPlugin extends Plugin {
 			this.app,
 			'Bookmark current page',
 			active,
-			({ title, url }) => {
-				void this.store.addBookmark(title, url, null);
+			({ title, url, iconType, iconValue }) => {
+				void this.store.addBookmark(title, url, null, iconType, iconValue);
 			},
 			(url) => this.store.findByUrl(url)?.title
 		).open();
