@@ -1,6 +1,6 @@
 {
   "name": "browser-bookmark",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "An independent bookmarks sidebar that opens saved links in Obsidian's built-in Web Viewer",
   "main": "main.js",
   "scripts": {

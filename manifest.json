@@ -1,7 +1,7 @@
 {
   "id": "browser-bookmark",
   "name": "Browser Bookmark",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "minAppVersion": "1.8.3",
   "description": "An independent bookmarks sidebar that opens saved links in the built-in Web Viewer, so you never have to leave the app to browse.",
   "author": "notenerd",
