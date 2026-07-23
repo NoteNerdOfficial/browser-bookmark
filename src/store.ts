@@ -6,6 +6,7 @@ import {
 	DEFAULT_DATA,
 	DEFAULT_SETTINGS,
 	generateId,
+	PINNED_PARENT_ID,
 } from './types';
 
 export class BookmarkStore {
@@ -184,7 +185,10 @@ export class BookmarkStore {
 	/**
 	 * Moves `id` to be a child of `newParentId`, inserted at `index` among its
 	 * new siblings. Reordering within the same parent is just a move to a new
-	 * index there, so this single method covers both drag gestures.
+	 * index there, so this single method covers both drag gestures. Pinning is
+	 * also just a move -- `PINNED_PARENT_ID` is a reserved parentId, not a real
+	 * folder, so no special-casing is needed for rename/delete/reorder on a
+	 * pinned bookmark, only for the two convenience wrappers below.
 	 */
 	async moveInto(id: string, newParentId: string | null, index: number): Promise<void> {
 		const node = this.data.items.find((i) => i.id === id);
@@ -200,5 +204,18 @@ export class BookmarkStore {
 		});
 		await this.save();
 		this.notify();
+	}
+
+	get pinned(): TreeNode[] {
+		return this.children(PINNED_PARENT_ID);
+	}
+
+	async pin(id: string): Promise<void> {
+		await this.moveInto(id, PINNED_PARENT_ID, this.children(PINNED_PARENT_ID).length);
+	}
+
+	/** Unpins to the root of the tree, not back to wherever it was before pinning -- simpler and more predictable than tracking a prior location that could itself have been deleted or reorganized since. */
+	async unpin(id: string): Promise<void> {
+		await this.moveInto(id, null, this.children(null).length);
 	}
 }

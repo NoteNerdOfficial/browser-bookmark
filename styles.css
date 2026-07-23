@@ -58,6 +58,61 @@
 	border-bottom-color: var(--interactive-accent, #7c6ff0);
 }
 
+.browser-bookmark-pinned-row {
+	display: none;
+	flex-wrap: wrap;
+	gap: 6px;
+	padding: 8px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.browser-bookmark-pinned-row.is-visible {
+	display: flex;
+}
+
+.browser-bookmark-pinned-btn {
+	position: relative;
+	width: 48px;
+	height: 48px;
+	border-radius: 11px;
+	border: 1px solid var(--background-modifier-border);
+	background: transparent;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+}
+
+.browser-bookmark-pinned-btn:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+.browser-bookmark-pinned-btn .browser-bookmark-favicon,
+.browser-bookmark-pinned-btn .browser-bookmark-favicon-img {
+	width: 26px;
+	height: 26px;
+}
+
+/* Overrides the tree rows' top/bottom insertion line -- this row is
+   horizontal and wraps, so "before/after" means left/right edge instead. */
+.browser-bookmark-pinned-btn.browser-bookmark-drop-before::before,
+.browser-bookmark-pinned-btn.browser-bookmark-drop-after::after {
+	left: auto;
+	right: auto;
+	top: 2px;
+	bottom: 2px;
+	width: 2px;
+	height: auto;
+}
+
+.browser-bookmark-pinned-btn.browser-bookmark-drop-before::before {
+	left: -4px;
+}
+
+.browser-bookmark-pinned-btn.browser-bookmark-drop-after::after {
+	right: -4px;
+}
+
 .browser-bookmark-tree {
 	flex: 1 1 auto;
 	overflow-y: auto;

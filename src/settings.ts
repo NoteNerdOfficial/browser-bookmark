@@ -36,5 +36,26 @@ export class BrowserBookmarkSettingTab extends PluginSettingTab {
 					await this.plugin.store.updateSettings({ interceptLinks: value });
 				})
 			);
+
+		new Setting(containerEl)
+			.setName('Show favicons')
+			.setDesc(
+				"Fetch each bookmark's real site icon from Google's favicon service. Turn off to always show a plain globe icon instead (no requests sent for your bookmarked domains)."
+			)
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.store.settings.showFavicons).onChange(async (value) => {
+					await this.plugin.store.updateSettings({ showFavicons: value });
+				})
+			);
+
+		new Setting(containerEl)
+			.setName('Show ribbon icon')
+			.setDesc('Show a bookmark icon in the left ribbon to open the sidebar.')
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.store.settings.showRibbonIcon).onChange(async (value) => {
+					await this.plugin.store.updateSettings({ showRibbonIcon: value });
+					this.plugin.updateRibbonIcon();
+				})
+			);
 	}
 }

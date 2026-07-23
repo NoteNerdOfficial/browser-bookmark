@@ -2,7 +2,7 @@ import { ItemView, Menu, Notice, WorkspaceLeaf, setIcon } from 'obsidian';
 import type BrowserBookmarkPlugin from '../main';
 import type { BookmarkStore } from '../store';
 import type { TreeNode } from '../types';
-import { VIEW_TYPE_BROWSER_BOOKMARK } from '../types';
+import { VIEW_TYPE_BROWSER_BOOKMARK, PINNED_PARENT_ID } from '../types';
 import { openBookmark } from '../webviewer';
 import {
 	parseNetscapeHtml,
@@ -62,6 +62,7 @@ function hasLinkData(dt: DataTransfer | null): boolean {
 export class BookmarkListView extends ItemView {
 	private store: BookmarkStore;
 	private treeEl!: HTMLElement;
+	private pinnedRowEl!: HTMLElement;
 	private searchInputEl!: HTMLInputElement;
 	private draggedId: string | null = null;
 	private dropMarkedEl: HTMLElement | null = null;
@@ -100,6 +101,9 @@ export class BookmarkListView extends ItemView {
 		this.makeIconButton(toolbar, 'search', 'Search', () => this.toggleSearch()).addClass(
 			'browser-bookmark-search-toggle'
 		);
+
+		this.pinnedRowEl = container.createDiv({ cls: 'browser-bookmark-pinned-row' });
+		this.registerPinnedRowDropZone();
 
 		this.searchInputEl = container.createEl('input', {
 			cls: 'browser-bookmark-search-input',
@@ -160,6 +164,7 @@ export class BookmarkListView extends ItemView {
 	}
 
 	private render(): void {
+		this.renderPinnedRow();
 		this.treeEl.empty();
 		this.visibleOrder = [];
 		const query = this.searchQuery.trim().toLowerCase();
@@ -248,14 +253,14 @@ export class BookmarkListView extends ItemView {
 	/** Shows the site's real favicon, falling back to a generic globe icon on any failure. */
 	private renderFavicon(row: HTMLElement, url: string | undefined): void {
 		const box = row.createDiv({ cls: 'browser-bookmark-favicon' });
-		const domain = this.extractDomain(url);
+		const domain = this.store.settings.showFavicons ? this.extractDomain(url) : null;
 		if (!domain) {
 			setIcon(box, 'globe');
 			return;
 		}
 		const img = box.createEl('img', {
 			cls: 'browser-bookmark-favicon-img',
-			attr: { src: `https://www.google.com/s2/favicons?sz=32&domain=${encodeURIComponent(domain)}` },
+			attr: { src: `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(domain)}` },
 		});
 		img.addEventListener(
 			'error',
@@ -274,6 +279,30 @@ export class BookmarkListView extends ItemView {
 		} catch {
 			return null;
 		}
+	}
+
+	// ── Pinned row ───────────────────────────────────────────
+
+	/** Hidden entirely when nothing's pinned -- no placeholder/drop-hint box. The first pin always comes from a bookmark's context menu, never a drag onto empty space, since there's nothing visible to drag onto yet. */
+	private renderPinnedRow(): void {
+		const pinned = this.store.pinned;
+		this.pinnedRowEl.empty();
+		this.pinnedRowEl.toggleClass('is-visible', pinned.length > 0);
+		for (const node of pinned) this.renderPinnedButton(node);
+	}
+
+	private renderPinnedButton(node: TreeNode): void {
+		const btn = this.pinnedRowEl.createDiv({
+			cls: 'browser-bookmark-pinned-btn',
+			attr: { draggable: 'true', title: node.title, 'data-node-id': node.id },
+		});
+		this.renderFavicon(btn, node.url);
+		btn.addEventListener('click', () => void openBookmark(this.app, node.url ?? '', this.store.settings.openIn));
+		btn.addEventListener('contextmenu', (evt) => {
+			evt.preventDefault();
+			this.showBookmarkMenu(node, evt);
+		});
+		this.wirePinnedDrag(btn, node);
 	}
 
 	// ── Keyboard navigation ──────────────────────────────────
@@ -433,6 +462,16 @@ export class BookmarkListView extends ItemView {
 				void openBookmark(this.app, node.url ?? '', 'window');
 			})
 		);
+		menu.addSeparator();
+		if (node.parentId === PINNED_PARENT_ID) {
+			menu.addItem((item) =>
+				item.setTitle('Unpin').setIcon('pin-off').onClick(() => void this.store.unpin(node.id))
+			);
+		} else {
+			menu.addItem((item) =>
+				item.setTitle('Pin to top').setIcon('pin').onClick(() => void this.store.pin(node.id))
+			);
+		}
 		menu.addSeparator();
 		menu.addItem((item) =>
 			item.setTitle('Edit').setIcon('pencil').onClick(() => {
@@ -674,6 +713,72 @@ export class BookmarkListView extends ItemView {
 				evt.preventDefault();
 				void this.store.addBookmark(link.title, link.url, null);
 			}
+		});
+	}
+
+	/**
+	 * Pinned buttons sit in a horizontal, wrapping row, so reordering compares
+	 * cursor X against the button's left/right halves instead of the tree
+	 * rows' top/bottom split. No grip handle here -- the whole button is the
+	 * drag source, which is fine for a small icon-only target since a native
+	 * click and a native drag-start are already mutually exclusive gestures
+	 * (the tree rows need the separate grip specifically because their click
+	 * target is mostly title text, where that ambiguity actually bites).
+	 */
+	private wirePinnedDrag(btn: HTMLElement, node: TreeNode): void {
+		btn.addEventListener('dragstart', (evt) => {
+			this.draggedId = node.id;
+			btn.addClass('browser-bookmark-dragging');
+			evt.dataTransfer?.setData('text/plain', node.id);
+			evt.dataTransfer!.effectAllowed = 'move';
+		});
+		btn.addEventListener('dragend', () => {
+			btn.removeClass('browser-bookmark-dragging');
+			this.clearDropMarker();
+			this.draggedId = null;
+		});
+		btn.addEventListener('dragover', (evt) => {
+			if (!this.draggedId || this.draggedId === node.id) return;
+			if (this.store.items.find((i) => i.id === this.draggedId)?.type !== 'bookmark') return;
+			evt.preventDefault();
+			this.markDropTarget(btn, this.computeHorizontalDropPosition(btn, evt));
+		});
+		btn.addEventListener('dragleave', () => this.clearDropMarker());
+		btn.addEventListener('drop', (evt) => {
+			if (!this.draggedId || this.draggedId === node.id) return;
+			evt.preventDefault();
+			void this.handlePinnedDrop(this.draggedId, node, this.computeHorizontalDropPosition(btn, evt));
+			this.clearDropMarker();
+		});
+	}
+
+	private computeHorizontalDropPosition(el: HTMLElement, evt: DragEvent): 'before' | 'after' {
+		const rect = el.getBoundingClientRect();
+		return evt.clientX - rect.left < rect.width / 2 ? 'before' : 'after';
+	}
+
+	private async handlePinnedDrop(draggedId: string, target: TreeNode, position: 'before' | 'after'): Promise<void> {
+		const draggedNode = this.store.items.find((i) => i.id === draggedId);
+		if (draggedNode?.type !== 'bookmark') return;
+		const siblings = this.store.pinned.filter((n) => n.id !== draggedId);
+		let index = siblings.findIndex((n) => n.id === target.id);
+		if (index === -1) index = siblings.length;
+		if (position === 'after') index += 1;
+		await this.store.moveInto(draggedId, PINNED_PARENT_ID, index);
+	}
+
+	private registerPinnedRowDropZone(): void {
+		this.pinnedRowEl.addEventListener('dragover', (evt) => {
+			if (evt.target !== this.pinnedRowEl || !this.draggedId) return;
+			if (this.store.items.find((i) => i.id === this.draggedId)?.type !== 'bookmark') return;
+			evt.preventDefault();
+		});
+		this.pinnedRowEl.addEventListener('drop', (evt) => {
+			if (evt.target !== this.pinnedRowEl || !this.draggedId) return;
+			const node = this.store.items.find((i) => i.id === this.draggedId);
+			if (node?.type !== 'bookmark') return;
+			evt.preventDefault();
+			void this.store.moveInto(this.draggedId, PINNED_PARENT_ID, this.store.pinned.length);
 		});
 	}
 

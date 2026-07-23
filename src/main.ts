@@ -8,6 +8,7 @@ import { openBookmark, getActiveWebViewerPage } from './webviewer';
 
 export default class BrowserBookmarkPlugin extends Plugin {
 	store!: BookmarkStore;
+	private ribbonIconEl: HTMLElement | null = null;
 
 	async onload(): Promise<void> {
 		this.store = new BookmarkStore(this);
@@ -15,7 +16,7 @@ export default class BrowserBookmarkPlugin extends Plugin {
 
 		this.registerView(VIEW_TYPE_BROWSER_BOOKMARK, (leaf) => new BookmarkListView(leaf, this));
 
-		this.addRibbonIcon('bookmark', 'Open browser bookmarks', () => this.activateView());
+		this.updateRibbonIcon();
 
 		this.addCommand({
 			id: 'open-sidebar',
@@ -41,6 +42,17 @@ export default class BrowserBookmarkPlugin extends Plugin {
 
 	getActiveWebViewerPage() {
 		return getActiveWebViewerPage(this.app);
+	}
+
+	/** Adds or removes the ribbon icon to match the current setting, live -- called on load and whenever the setting toggles. */
+	updateRibbonIcon(): void {
+		const shouldShow = this.store.settings.showRibbonIcon;
+		if (shouldShow && !this.ribbonIconEl) {
+			this.ribbonIconEl = this.addRibbonIcon('bookmark', 'Open browser bookmarks', () => this.activateView());
+		} else if (!shouldShow && this.ribbonIconEl) {
+			this.ribbonIconEl.remove();
+			this.ribbonIconEl = null;
+		}
 	}
 
 	/**

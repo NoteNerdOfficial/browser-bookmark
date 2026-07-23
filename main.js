@@ -32,13 +32,16 @@ var import_obsidian8 = require("obsidian");
 // src/types.ts
 var DEFAULT_SETTINGS = {
   openIn: "tab",
-  interceptLinks: false
+  interceptLinks: false,
+  showFavicons: true,
+  showRibbonIcon: true
 };
 var DEFAULT_DATA = {
   items: [],
   settings: DEFAULT_SETTINGS
 };
 var VIEW_TYPE_BROWSER_BOOKMARK = "browser-bookmark-view";
+var PINNED_PARENT_ID = "__pinned__";
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
 }
@@ -199,7 +202,10 @@ var BookmarkStore = class {
   /**
    * Moves `id` to be a child of `newParentId`, inserted at `index` among its
    * new siblings. Reordering within the same parent is just a move to a new
-   * index there, so this single method covers both drag gestures.
+   * index there, so this single method covers both drag gestures. Pinning is
+   * also just a move -- `PINNED_PARENT_ID` is a reserved parentId, not a real
+   * folder, so no special-casing is needed for rename/delete/reorder on a
+   * pinned bookmark, only for the two convenience wrappers below.
    */
   async moveInto(id, newParentId, index) {
     const node = this.data.items.find((i) => i.id === id);
@@ -215,6 +221,16 @@ var BookmarkStore = class {
     });
     await this.save();
     this.notify();
+  }
+  get pinned() {
+    return this.children(PINNED_PARENT_ID);
+  }
+  async pin(id) {
+    await this.moveInto(id, PINNED_PARENT_ID, this.children(PINNED_PARENT_ID).length);
+  }
+  /** Unpins to the root of the tree, not back to wherever it was before pinning -- simpler and more predictable than tracking a prior location that could itself have been deleted or reorganized since. */
+  async unpin(id) {
+    await this.moveInto(id, null, this.children(null).length);
   }
 };
 
@@ -691,6 +707,8 @@ var BookmarkListView = class extends import_obsidian6.ItemView {
     this.makeIconButton(toolbar, "search", "Search", () => this.toggleSearch()).addClass(
       "browser-bookmark-search-toggle"
     );
+    this.pinnedRowEl = container.createDiv({ cls: "browser-bookmark-pinned-row" });
+    this.registerPinnedRowDropZone();
     this.searchInputEl = container.createEl("input", {
       cls: "browser-bookmark-search-input",
       attr: { type: "text", placeholder: "Search bookmarks\u2026" }
@@ -740,6 +758,7 @@ var BookmarkListView = class extends import_obsidian6.ItemView {
     return this.store.children(node.id).some((child) => this.matchesQuery(child, query));
   }
   render() {
+    this.renderPinnedRow();
     this.treeEl.empty();
     this.visibleOrder = [];
     const query = this.searchQuery.trim().toLowerCase();
@@ -820,14 +839,14 @@ var BookmarkListView = class extends import_obsidian6.ItemView {
   /** Shows the site's real favicon, falling back to a generic globe icon on any failure. */
   renderFavicon(row, url) {
     const box = row.createDiv({ cls: "browser-bookmark-favicon" });
-    const domain = this.extractDomain(url);
+    const domain = this.store.settings.showFavicons ? this.extractDomain(url) : null;
     if (!domain) {
       (0, import_obsidian6.setIcon)(box, "globe");
       return;
     }
     const img = box.createEl("img", {
       cls: "browser-bookmark-favicon-img",
-      attr: { src: `https://www.google.com/s2/favicons?sz=32&domain=${encodeURIComponent(domain)}` }
+      attr: { src: `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(domain)}` }
     });
     img.addEventListener(
       "error",
@@ -846,6 +865,31 @@ var BookmarkListView = class extends import_obsidian6.ItemView {
     } catch (e) {
       return null;
     }
+  }
+  // ── Pinned row ───────────────────────────────────────────
+  /** Hidden entirely when nothing's pinned -- no placeholder/drop-hint box. The first pin always comes from a bookmark's context menu, never a drag onto empty space, since there's nothing visible to drag onto yet. */
+  renderPinnedRow() {
+    const pinned = this.store.pinned;
+    this.pinnedRowEl.empty();
+    this.pinnedRowEl.toggleClass("is-visible", pinned.length > 0);
+    for (const node of pinned)
+      this.renderPinnedButton(node);
+  }
+  renderPinnedButton(node) {
+    const btn = this.pinnedRowEl.createDiv({
+      cls: "browser-bookmark-pinned-btn",
+      attr: { draggable: "true", title: node.title, "data-node-id": node.id }
+    });
+    this.renderFavicon(btn, node.url);
+    btn.addEventListener("click", () => {
+      var _a;
+      return void openBookmark(this.app, (_a = node.url) != null ? _a : "", this.store.settings.openIn);
+    });
+    btn.addEventListener("contextmenu", (evt) => {
+      evt.preventDefault();
+      this.showBookmarkMenu(node, evt);
+    });
+    this.wirePinnedDrag(btn, node);
   }
   // ── Keyboard navigation ──────────────────────────────────
   setFocus(id) {
@@ -1009,6 +1053,16 @@ var BookmarkListView = class extends import_obsidian6.ItemView {
         void openBookmark(this.app, (_a = node.url) != null ? _a : "", "window");
       })
     );
+    menu.addSeparator();
+    if (node.parentId === PINNED_PARENT_ID) {
+      menu.addItem(
+        (item) => item.setTitle("Unpin").setIcon("pin-off").onClick(() => void this.store.unpin(node.id))
+      );
+    } else {
+      menu.addItem(
+        (item) => item.setTitle("Pin to top").setIcon("pin").onClick(() => void this.store.pin(node.id))
+      );
+    }
     menu.addSeparator();
     menu.addItem(
       (item) => item.setTitle("Edit").setIcon("pencil").onClick(() => {
@@ -1246,6 +1300,81 @@ var BookmarkListView = class extends import_obsidian6.ItemView {
       }
     });
   }
+  /**
+   * Pinned buttons sit in a horizontal, wrapping row, so reordering compares
+   * cursor X against the button's left/right halves instead of the tree
+   * rows' top/bottom split. No grip handle here -- the whole button is the
+   * drag source, which is fine for a small icon-only target since a native
+   * click and a native drag-start are already mutually exclusive gestures
+   * (the tree rows need the separate grip specifically because their click
+   * target is mostly title text, where that ambiguity actually bites).
+   */
+  wirePinnedDrag(btn, node) {
+    btn.addEventListener("dragstart", (evt) => {
+      var _a;
+      this.draggedId = node.id;
+      btn.addClass("browser-bookmark-dragging");
+      (_a = evt.dataTransfer) == null ? void 0 : _a.setData("text/plain", node.id);
+      evt.dataTransfer.effectAllowed = "move";
+    });
+    btn.addEventListener("dragend", () => {
+      btn.removeClass("browser-bookmark-dragging");
+      this.clearDropMarker();
+      this.draggedId = null;
+    });
+    btn.addEventListener("dragover", (evt) => {
+      var _a;
+      if (!this.draggedId || this.draggedId === node.id)
+        return;
+      if (((_a = this.store.items.find((i) => i.id === this.draggedId)) == null ? void 0 : _a.type) !== "bookmark")
+        return;
+      evt.preventDefault();
+      this.markDropTarget(btn, this.computeHorizontalDropPosition(btn, evt));
+    });
+    btn.addEventListener("dragleave", () => this.clearDropMarker());
+    btn.addEventListener("drop", (evt) => {
+      if (!this.draggedId || this.draggedId === node.id)
+        return;
+      evt.preventDefault();
+      void this.handlePinnedDrop(this.draggedId, node, this.computeHorizontalDropPosition(btn, evt));
+      this.clearDropMarker();
+    });
+  }
+  computeHorizontalDropPosition(el, evt) {
+    const rect = el.getBoundingClientRect();
+    return evt.clientX - rect.left < rect.width / 2 ? "before" : "after";
+  }
+  async handlePinnedDrop(draggedId, target, position) {
+    const draggedNode = this.store.items.find((i) => i.id === draggedId);
+    if ((draggedNode == null ? void 0 : draggedNode.type) !== "bookmark")
+      return;
+    const siblings = this.store.pinned.filter((n) => n.id !== draggedId);
+    let index = siblings.findIndex((n) => n.id === target.id);
+    if (index === -1)
+      index = siblings.length;
+    if (position === "after")
+      index += 1;
+    await this.store.moveInto(draggedId, PINNED_PARENT_ID, index);
+  }
+  registerPinnedRowDropZone() {
+    this.pinnedRowEl.addEventListener("dragover", (evt) => {
+      var _a;
+      if (evt.target !== this.pinnedRowEl || !this.draggedId)
+        return;
+      if (((_a = this.store.items.find((i) => i.id === this.draggedId)) == null ? void 0 : _a.type) !== "bookmark")
+        return;
+      evt.preventDefault();
+    });
+    this.pinnedRowEl.addEventListener("drop", (evt) => {
+      if (evt.target !== this.pinnedRowEl || !this.draggedId)
+        return;
+      const node = this.store.items.find((i) => i.id === this.draggedId);
+      if ((node == null ? void 0 : node.type) !== "bookmark")
+        return;
+      evt.preventDefault();
+      void this.store.moveInto(this.draggedId, PINNED_PARENT_ID, this.store.pinned.length);
+    });
+  }
   async handleDrop(draggedId, target, position) {
     if (position === "into") {
       const index2 = this.store.children(target.id).filter((n) => n.id !== draggedId).length;
@@ -1282,16 +1411,33 @@ var BrowserBookmarkSettingTab = class extends import_obsidian7.PluginSettingTab 
         await this.plugin.store.updateSettings({ interceptLinks: value });
       })
     );
+    new import_obsidian7.Setting(containerEl).setName("Show favicons").setDesc(
+      "Fetch each bookmark's real site icon from Google's favicon service. Turn off to always show a plain globe icon instead (no requests sent for your bookmarked domains)."
+    ).addToggle(
+      (toggle) => toggle.setValue(this.plugin.store.settings.showFavicons).onChange(async (value) => {
+        await this.plugin.store.updateSettings({ showFavicons: value });
+      })
+    );
+    new import_obsidian7.Setting(containerEl).setName("Show ribbon icon").setDesc("Show a bookmark icon in the left ribbon to open the sidebar.").addToggle(
+      (toggle) => toggle.setValue(this.plugin.store.settings.showRibbonIcon).onChange(async (value) => {
+        await this.plugin.store.updateSettings({ showRibbonIcon: value });
+        this.plugin.updateRibbonIcon();
+      })
+    );
   }
 };
 
 // src/main.ts
 var BrowserBookmarkPlugin = class extends import_obsidian8.Plugin {
+  constructor() {
+    super(...arguments);
+    this.ribbonIconEl = null;
+  }
   async onload() {
     this.store = new BookmarkStore(this);
     await this.store.load();
     this.registerView(VIEW_TYPE_BROWSER_BOOKMARK, (leaf) => new BookmarkListView(leaf, this));
-    this.addRibbonIcon("bookmark", "Open browser bookmarks", () => this.activateView());
+    this.updateRibbonIcon();
     this.addCommand({
       id: "open-sidebar",
       name: "Open sidebar",
@@ -1312,6 +1458,16 @@ var BrowserBookmarkPlugin = class extends import_obsidian8.Plugin {
   }
   getActiveWebViewerPage() {
     return getActiveWebViewerPage(this.app);
+  }
+  /** Adds or removes the ribbon icon to match the current setting, live -- called on load and whenever the setting toggles. */
+  updateRibbonIcon() {
+    const shouldShow = this.store.settings.showRibbonIcon;
+    if (shouldShow && !this.ribbonIconEl) {
+      this.ribbonIconEl = this.addRibbonIcon("bookmark", "Open browser bookmarks", () => this.activateView());
+    } else if (!shouldShow && this.ribbonIconEl) {
+      this.ribbonIconEl.remove();
+      this.ribbonIconEl = null;
+    }
   }
   /**
    * Fires when a user explicitly toggles the plugin on -- not on every app
