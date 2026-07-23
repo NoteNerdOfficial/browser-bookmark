@@ -3,7 +3,7 @@
   "name": "Browser Bookmark",
   "version": "1.0.0",
   "minAppVersion": "1.8.3",
-  "description": "An independent bookmarks sidebar that opens saved links in Obsidian's built-in Web Viewer, so you never have to leave the app to browse.",
+  "description": "An independent bookmarks sidebar that opens saved links in the built-in Web Viewer, so you never have to leave the app to browse.",
   "author": "notenerd",
   "authorUrl": "",
   "fundingUrl": "",
