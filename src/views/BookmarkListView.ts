@@ -589,7 +589,7 @@ export class BookmarkListView extends ItemView {
 
 	private async importArcFromPath(path: string): Promise<void> {
 		try {
-			await this.processImportText('arc', readArcSidebarFile(path));
+			await this.processImportText('arc', await readArcSidebarFile(path));
 		} catch (err) {
 			console.error('Browser Bookmark: Arc import failed', err);
 			new Notice("Could not read Arc's data file -- see the developer console for details.");
