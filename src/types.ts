@@ -18,6 +18,8 @@ export interface TreeNode {
 	iconType?: BookmarkIconType;
 	/** Bookmarks only. A Lucide icon name or an image URL, depending on `iconType`. */
 	iconValue?: string;
+	/** Bookmarks only. Skips Web Viewer entirely and always opens in the system browser -- for sites (e.g. corporate SSO/VPN-gated pages) that don't work in an embedded webview no matter what. */
+	openExternally?: boolean;
 }
 
 export type PaneType = 'tab' | 'split' | 'window';

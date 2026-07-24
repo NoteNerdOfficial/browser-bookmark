@@ -3,7 +3,7 @@ import type BrowserBookmarkPlugin from '../main';
 import type { BookmarkStore } from '../store';
 import type { TreeNode } from '../types';
 import { VIEW_TYPE_BROWSER_BOOKMARK, PINNED_PARENT_ID } from '../types';
-import { openBookmark } from '../webviewer';
+import { openBookmark, openInSystemBrowser } from '../webviewer';
 import {
 	parseNetscapeHtml,
 	parseArcSidebarJson,
@@ -12,6 +12,7 @@ import {
 	readArcSidebarFile,
 	type ImportBatch,
 } from '../import';
+import { exportToNetscapeHtml } from '../export';
 import { BookmarkEditModal } from '../modals/BookmarkEditModal';
 import { FolderEditModal } from '../modals/FolderEditModal';
 import { ImportPreviewModal } from '../modals/ImportPreviewModal';
@@ -97,7 +98,7 @@ export class BookmarkListView extends ItemView {
 		const toolbar = container.createDiv({ cls: 'browser-bookmark-toolbar' });
 		this.makeIconButton(toolbar, 'file-plus', 'New bookmark', () => this.createBookmark(null));
 		this.makeIconButton(toolbar, 'folder-plus', 'New folder', () => this.createFolder(null));
-		this.makeIconButton(toolbar, 'download', 'Import bookmarks', (evt) => this.openImportMenu(evt));
+		this.makeIconButton(toolbar, 'download', 'Import / export bookmarks', (evt) => this.openImportMenu(evt));
 		this.makeIconButton(toolbar, 'search', 'Search', () => this.toggleSearch()).addClass(
 			'browser-bookmark-search-toggle'
 		);
@@ -243,7 +244,7 @@ export class BookmarkListView extends ItemView {
 		title.setText(node.title);
 		this.wireRename(title, node);
 
-		this.wireRowClick(row, () => void openBookmark(this.app, node.url ?? '', this.store.settings.openIn));
+		this.wireRowClick(row, () => this.openDefault(node));
 		row.addEventListener('contextmenu', (evt) => {
 			evt.preventDefault();
 			this.showBookmarkMenu(node, evt);
@@ -319,7 +320,7 @@ export class BookmarkListView extends ItemView {
 			attr: { draggable: 'true', title: node.title, 'data-node-id': node.id },
 		});
 		this.renderFavicon(btn, node);
-		btn.addEventListener('click', () => void openBookmark(this.app, node.url ?? '', this.store.settings.openIn));
+		btn.addEventListener('click', () => this.openDefault(node));
 		btn.addEventListener('contextmenu', (evt) => {
 			evt.preventDefault();
 			this.showBookmarkMenu(node, evt);
@@ -382,7 +383,7 @@ export class BookmarkListView extends ItemView {
 			case 'Enter':
 				evt.preventDefault();
 				if (node.type === 'folder') void this.store.toggleCollapsed(node.id);
-				else void openBookmark(this.app, node.url ?? '', this.store.settings.openIn);
+				else this.openDefault(node);
 				break;
 			case 'F2': {
 				evt.preventDefault();
@@ -467,12 +468,29 @@ export class BookmarkListView extends ItemView {
 
 	// ── Context menus ────────────────────────────────────────
 
+	private async copyToClipboard(text: string): Promise<void> {
+		try {
+			await navigator.clipboard.writeText(text);
+			new Notice('Copied to clipboard.');
+		} catch (err) {
+			console.error('Browser Bookmark: clipboard write failed', err);
+			new Notice('Could not copy to clipboard.');
+		}
+	}
+
+	/** The default single-click/Enter/"Open" action -- respects `openExternally`, unlike the explicit split/window/system-browser menu items, which are always deliberate overrides. */
+	private openDefault(node: TreeNode): void {
+		if (node.openExternally) {
+			void openInSystemBrowser(node.url ?? '');
+		} else {
+			void openBookmark(this.app, node.url ?? '', this.store.settings.openIn);
+		}
+	}
+
 	private showBookmarkMenu(node: TreeNode, evt: MouseEvent): void {
 		const menu = new Menu();
 		menu.addItem((item) =>
-			item.setTitle('Open').setIcon('external-link').onClick(() => {
-				void openBookmark(this.app, node.url ?? '', this.store.settings.openIn);
-			})
+			item.setTitle('Open').setIcon('external-link').onClick(() => this.openDefault(node))
 		);
 		menu.addItem((item) =>
 			item.setTitle('Open in new split').setIcon('separator-vertical').onClick(() => {
@@ -483,6 +501,30 @@ export class BookmarkListView extends ItemView {
 			item.setTitle('Open in new window').setIcon('picture-in-picture-2').onClick(() => {
 				void openBookmark(this.app, node.url ?? '', 'window');
 			})
+		);
+		menu.addItem((item) =>
+			item.setTitle('Open in system browser').setIcon('globe').onClick(() => {
+				void openInSystemBrowser(node.url ?? '');
+			})
+		);
+		menu.addSeparator();
+		menu.addItem((item) =>
+			item.setTitle('Copy link').setIcon('copy').onClick(() => {
+				void this.copyToClipboard(node.url ?? '');
+			})
+		);
+		menu.addItem((item) =>
+			item.setTitle('Copy as Markdown link').setIcon('copy').onClick(() => {
+				void this.copyToClipboard(`[${node.title}](${node.url ?? ''})`);
+			})
+		);
+		menu.addSeparator();
+		menu.addItem((item) =>
+			item
+				.setTitle('Always open externally')
+				.setIcon('globe')
+				.setChecked(Boolean(node.openExternally))
+				.onClick(() => void this.store.toggleOpenExternally(node.id))
 		);
 		menu.addSeparator();
 		if (node.parentId === PINNED_PARENT_ID) {
@@ -561,7 +603,7 @@ export class BookmarkListView extends ItemView {
 		}).open();
 	}
 
-	// ── Import ───────────────────────────────────────────────
+	// ── Import / export ──────────────────────────────────────
 
 	private openImportMenu(evt: MouseEvent): void {
 		const menu = new Menu();
@@ -574,7 +616,33 @@ export class BookmarkListView extends ItemView {
 		menu.addItem((item) =>
 			item.setTitle('Import from Arc').setIcon('file-up').onClick(() => this.pickImportFile('arc'))
 		);
+		menu.addSeparator();
+		menu.addItem((item) =>
+			item.setTitle('Export bookmarks').setIcon('file-down').onClick(() => this.exportBookmarks())
+		);
 		menu.showAtMouseEvent(evt);
+	}
+
+	/**
+	 * Standard browser download flow (Blob + object URL + a hidden <a
+	 * download>) -- no Electron-specific save-dialog API needed, and it's the
+	 * same well-tested pattern used for the import file pickers. No Notice
+	 * here on purpose: the save dialog it triggers can pop up asynchronously,
+	 * after this function has already returned, so a "done" Notice fired
+	 * immediately would show up before the user has even picked a location,
+	 * which read as confusing rather than reassuring.
+	 */
+	private exportBookmarks(): void {
+		const html = exportToNetscapeHtml(this.store.items);
+		const blob = new Blob([html], { type: 'text/html' });
+		const url = URL.createObjectURL(blob);
+		const dateLabel = new Date().toISOString().slice(0, 10);
+		const link = createEl('a', { attr: { href: url, download: `browser-bookmark-export-${dateLabel}.html` } });
+		link.hide();
+		document.body.appendChild(link);
+		link.click();
+		document.body.removeChild(link);
+		URL.revokeObjectURL(url);
 	}
 
 	/**
@@ -611,7 +679,7 @@ export class BookmarkListView extends ItemView {
 
 	private async importArcFromPath(path: string): Promise<void> {
 		try {
-			await this.processImportText('arc', await readArcSidebarFile(path));
+			await this.processImportText('arc', readArcSidebarFile(path));
 		} catch (err) {
 			console.error('Browser Bookmark: Arc import failed', err);
 			new Notice("Could not read Arc's data file -- see the developer console for details.");

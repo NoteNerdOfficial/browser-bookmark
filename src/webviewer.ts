@@ -15,6 +15,38 @@ function isWebViewerAvailable(app: App): boolean {
 }
 
 /**
+ * Once Web Viewer is enabled, Obsidian appears to intercept `window.open()`
+ * itself and redirect it into a Web Viewer tab rather than letting it reach
+ * the OS -- confirmed by testing, not just theory: a plain `window.open`
+ * kept landing in Web Viewer even when the intent was explicitly to escape
+ * it. `shell.openExternal()` asks the OS directly to open the URL, bypassing
+ * that interception entirely, since it isn't a window-open event at all.
+ * Not available on mobile (no Electron there), where `window.open` is the
+ * only option and isn't subject to this interception anyway.
+ *
+ * Loads `electron` via `require`, not a dynamic `import()`: confirmed by
+ * testing in the real app that a dynamic import of a bare specifier like
+ * `'electron'` fails outright in Obsidian's renderer with "TypeError: Failed
+ * to resolve module specifier" -- `require` is the only thing that actually
+ * works here, same lesson as the Node fs/os/path loading in `import.ts`.
+ */
+async function openExternally(url: string): Promise<void> {
+	if (Platform.isDesktop) {
+		try {
+			/* eslint-disable no-undef, @typescript-eslint/no-require-imports --
+			   require() is the only thing that actually loads 'electron' at runtime here; see the doc comment above. */
+			const electron = require('electron') as typeof import('electron');
+			/* eslint-enable no-undef, @typescript-eslint/no-require-imports -- end of the require() line above */
+			await electron.shell.openExternal(url);
+			return;
+		} catch (err) {
+			console.error('Browser Bookmark: shell.openExternal threw, falling back to window.open', err);
+		}
+	}
+	window.open(url, '_blank');
+}
+
+/**
  * Opens a URL in Obsidian's built-in Web Viewer core plugin when it's
  * enabled, falling back to the system browser otherwise (core plugin off,
  * unavailable on this Obsidian version, or on mobile where Web Viewer
@@ -37,7 +69,17 @@ export async function openBookmark(app: App, url: string, paneType: PaneType): P
 			// Fall through to the external-browser fallback below.
 		}
 	}
-	window.open(url, '_blank');
+	await openExternally(url);
+}
+
+/**
+ * Forces a URL open in the system browser, bypassing Web Viewer even when
+ * it's available. Some sites (e.g. corporate SSO/VPN-gated intranet pages)
+ * don't work well in an embedded webview regardless of settings, so this
+ * gives an explicit escape hatch alongside the automatic fallback above.
+ */
+export async function openInSystemBrowser(url: string): Promise<void> {
+	await openExternally(url);
 }
 
 /**

@@ -3,18 +3,20 @@ import { generateId, type TreeNode } from './types';
 
 /**
  * Node's fs/os/path don't exist on mobile, so this is gated on
- * `Platform.isDesktop` by every caller before it ever runs. Kept synchronous
- * specifically because `findArcSidebarFile` needs it to be: its caller's
- * manual file-picker fallback (`input.click()`) is only allowed to open
- * without an explicit user gesture in the same synchronous tick as the
- * originating click, and an `await` (which a dynamic `import()` introduces)
- * loses that, so the fallback fails with "File chooser dialog can only be
- * shown with a user activation." `require` is the only way to get these
- * synchronously; the project's `obsidianmd/no-nodejs-modules` rule still
- * (correctly) flags that as a warning since it's real Node-only code, which
- * is why `Platform.isDesktop` is checked before this is ever called.
- * `readArcSidebarFile` below has no such constraint (nothing after it needs
- * a preserved gesture), so it uses a plain async dynamic `import()` instead.
+ * `Platform.isDesktop` by every caller before it ever runs. Uses `require`
+ * rather than a dynamic `import()` for two independent reasons: (1)
+ * `findArcSidebarFile`'s caller falls back to a manual file picker
+ * (`input.click()`), which is only allowed to open without an explicit user
+ * gesture in the same synchronous tick as the originating click, and an
+ * `await` loses that; (2) confirmed by testing in the real app -- a dynamic
+ * `import()` of a bare specifier like `'fs'` or `'electron'` fails outright
+ * in Obsidian's renderer with "TypeError: Failed to resolve module
+ * specifier", so it isn't a viable alternative here even where the
+ * gesture-preservation concern doesn't apply. `require` is the only thing
+ * that actually works for loading these at runtime; the project's
+ * `obsidianmd/no-nodejs-modules` rule still (correctly) flags that as a
+ * warning since it's real Node-only code, which is why `Platform.isDesktop`
+ * is checked before this is ever called.
  */
 function loadNodeFsModulesSync(): {
 	fs: typeof import('fs');
@@ -65,9 +67,8 @@ export function findArcSidebarFile(): string | null {
 	return null;
 }
 
-/** No gesture-preservation constraint here (unlike `findArcSidebarFile`), so a plain async dynamic `import()` is enough -- no `require()` needed. */
-export async function readArcSidebarFile(path: string): Promise<string> {
-	const fs = await import('fs');
+export function readArcSidebarFile(path: string): string {
+	const { fs } = loadNodeFsModulesSync();
 	return fs.readFileSync(path, 'utf8');
 }
 

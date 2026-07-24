@@ -171,6 +171,14 @@ export class BookmarkStore {
 		this.notify();
 	}
 
+	async toggleOpenExternally(id: string): Promise<void> {
+		const node = this.data.items.find((i) => i.id === id);
+		if (!node || node.type !== 'bookmark') return;
+		node.openExternally = !node.openExternally;
+		await this.save();
+		this.notify();
+	}
+
 	/** Removes a node. If it's a folder, its descendants are removed too. */
 	async remove(id: string): Promise<void> {
 		const idsToRemove = new Set<string>([id]);
