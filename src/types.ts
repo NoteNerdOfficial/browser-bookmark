@@ -20,6 +20,8 @@ export interface TreeNode {
 	iconValue?: string;
 	/** Bookmarks only. Skips Web Viewer entirely and always opens in the system browser -- for sites (e.g. corporate SSO/VPN-gated pages) that don't work in an embedded webview no matter what. */
 	openExternally?: boolean;
+	/** Bookmarks only. Optional short note shown below the title in a muted font, e.g. as a reminder of why it was saved. */
+	description?: string;
 }
 
 export type PaneType = 'tab' | 'split' | 'window';

@@ -92,7 +92,7 @@ var BookmarkStore = class {
     const siblings = this.children(parentId);
     return siblings.length > 0 ? Math.max(...siblings.map((s) => s.order)) + 1 : 0;
   }
-  async addBookmark(title, url, parentId = null, iconType, iconValue) {
+  async addBookmark(title, url, parentId = null, fields = {}) {
     const node = {
       id: generateId(),
       type: "bookmark",
@@ -100,8 +100,9 @@ var BookmarkStore = class {
       url,
       parentId,
       order: this.nextOrder(parentId),
-      iconType,
-      iconValue
+      iconType: fields.iconType,
+      iconValue: fields.iconValue,
+      description: fields.description
     };
     this.data.items.push(node);
     await this.save();
@@ -157,14 +158,15 @@ var BookmarkStore = class {
     await this.save();
     this.notify();
   }
-  async updateBookmark(id, title, url, iconType, iconValue) {
+  async updateBookmark(id, title, url, fields = {}) {
     const node = this.data.items.find((i) => i.id === id);
     if (!node)
       return;
     node.title = title;
     node.url = url;
-    node.iconType = iconType;
-    node.iconValue = iconValue;
+    node.iconType = fields.iconType;
+    node.iconValue = fields.iconValue;
+    node.description = fields.description;
     await this.save();
     this.notify();
   }
@@ -561,15 +563,16 @@ function exportToNetscapeHtml(items) {
 var import_obsidian3 = require("obsidian");
 var BookmarkEditModal = class extends import_obsidian3.Modal {
   constructor(app, heading, initial, onSubmit, findDuplicateTitle) {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e;
     super(app);
     this.heading = heading;
     this.onSubmit = onSubmit;
     this.findDuplicateTitle = findDuplicateTitle;
     this.title_ = (_a = initial.title) != null ? _a : "";
     this.url = (_b = initial.url) != null ? _b : "";
-    this.iconType = (_c = initial.iconType) != null ? _c : "auto";
-    this.iconValue = (_d = initial.iconValue) != null ? _d : "";
+    this.description = (_c = initial.description) != null ? _c : "";
+    this.iconType = (_d = initial.iconType) != null ? _d : "auto";
+    this.iconValue = (_e = initial.iconValue) != null ? _e : "";
   }
   onOpen() {
     const { contentEl } = this;
@@ -577,6 +580,9 @@ var BookmarkEditModal = class extends import_obsidian3.Modal {
     contentEl.createEl("h2", { text: this.heading });
     new import_obsidian3.Setting(contentEl).setName("Title").addText(
       (text) => text.setPlaceholder("My bookmark").setValue(this.title_).onChange((value) => this.title_ = value)
+    );
+    new import_obsidian3.Setting(contentEl).setName("Description").setDesc("Optional. Shown below the title in the sidebar, e.g. as a reminder of why you saved it.").addText(
+      (text) => text.setPlaceholder("What this is for").setValue(this.description).onChange((value) => this.description = value)
     );
     let updateWarning = () => {
     };
@@ -653,6 +659,7 @@ var BookmarkEditModal = class extends import_obsidian3.Modal {
         this.onSubmit({
           title: trimmedTitle,
           url: trimmedUrl,
+          description: this.description.trim() || void 0,
           iconType: useCustomIcon ? this.iconType : void 0,
           iconValue: useCustomIcon ? trimmedIconValue : void 0
         });
@@ -863,9 +870,9 @@ var BookmarkListView = class extends import_obsidian6.ItemView {
     return btn;
   }
   matchesQuery(node, query) {
-    var _a;
+    var _a, _b;
     if (node.type === "bookmark") {
-      return node.title.toLowerCase().includes(query) || ((_a = node.url) != null ? _a : "").toLowerCase().includes(query);
+      return node.title.toLowerCase().includes(query) || ((_a = node.url) != null ? _a : "").toLowerCase().includes(query) || ((_b = node.description) != null ? _b : "").toLowerCase().includes(query);
     }
     return this.store.children(node.id).some((child) => this.matchesQuery(child, query));
   }
@@ -936,9 +943,13 @@ var BookmarkListView = class extends import_obsidian6.ItemView {
   renderBookmark(parentEl, node, depth) {
     const row = this.renderRowShell(parentEl, node, depth, "browser-bookmark-link-row");
     this.renderFavicon(row, node);
-    const title = row.createSpan({ cls: "browser-bookmark-title" });
+    const textCol = row.createDiv({ cls: "browser-bookmark-text-col" });
+    const title = textCol.createSpan({ cls: "browser-bookmark-title" });
     title.setText(node.title);
     this.wireRename(title, node);
+    if (node.description) {
+      textCol.createDiv({ cls: "browser-bookmark-description", text: node.description });
+    }
     this.wireRowClick(row, () => this.openDefault(node));
     row.addEventListener("contextmenu", (evt) => {
       evt.preventDefault();
@@ -1233,8 +1244,8 @@ var BookmarkListView = class extends import_obsidian6.ItemView {
           this.app,
           "Edit bookmark",
           node,
-          ({ title, url, iconType, iconValue }) => {
-            void this.store.updateBookmark(node.id, title, url, iconType, iconValue);
+          ({ title, url, iconType, iconValue, description }) => {
+            void this.store.updateBookmark(node.id, title, url, { iconType, iconValue, description });
           },
           (url) => {
             var _a;
@@ -1280,8 +1291,8 @@ var BookmarkListView = class extends import_obsidian6.ItemView {
       this.app,
       "New bookmark",
       active != null ? active : {},
-      ({ title, url, iconType, iconValue }) => {
-        void this.store.addBookmark(title, url, parentId, iconType, iconValue);
+      ({ title, url, iconType, iconValue, description }) => {
+        void this.store.addBookmark(title, url, parentId, { iconType, iconValue, description });
       },
       (url) => {
         var _a;
@@ -1716,8 +1727,8 @@ var BrowserBookmarkPlugin = class extends import_obsidian8.Plugin {
       this.app,
       "Bookmark current page",
       active,
-      ({ title, url, iconType, iconValue }) => {
-        void this.store.addBookmark(title, url, null, iconType, iconValue);
+      ({ title, url, iconType, iconValue, description }) => {
+        void this.store.addBookmark(title, url, null, { iconType, iconValue, description });
       },
       (url) => {
         var _a2;

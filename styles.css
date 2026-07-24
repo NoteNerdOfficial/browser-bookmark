@@ -135,7 +135,7 @@
 
 .browser-bookmark-row {
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
 	gap: 8px;
 	padding: 8px;
 	border-radius: 7px;
@@ -221,6 +221,29 @@
 .browser-bookmark-folder-title {
 	font-size: 12px;
 	font-weight: 600;
+}
+
+.browser-bookmark-text-col {
+	flex: 1 1 auto;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+
+/* Overrides the single-line-row sizing above -- in this stacked context the
+   title's height should come from its own content, not grow to fill the
+   column's cross-axis space. */
+.browser-bookmark-text-col > .browser-bookmark-title {
+	flex: 0 0 auto;
+}
+
+.browser-bookmark-description {
+	font-size: 11px;
+	color: var(--text-faint);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 .browser-bookmark-rename-input {

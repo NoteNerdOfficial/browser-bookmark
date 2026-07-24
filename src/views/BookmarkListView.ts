@@ -159,7 +159,11 @@ export class BookmarkListView extends ItemView {
 
 	private matchesQuery(node: TreeNode, query: string): boolean {
 		if (node.type === 'bookmark') {
-			return node.title.toLowerCase().includes(query) || (node.url ?? '').toLowerCase().includes(query);
+			return (
+				node.title.toLowerCase().includes(query) ||
+				(node.url ?? '').toLowerCase().includes(query) ||
+				(node.description ?? '').toLowerCase().includes(query)
+			);
 		}
 		return this.store.children(node.id).some((child) => this.matchesQuery(child, query));
 	}
@@ -240,9 +244,14 @@ export class BookmarkListView extends ItemView {
 
 		this.renderFavicon(row, node);
 
-		const title = row.createSpan({ cls: 'browser-bookmark-title' });
+		const textCol = row.createDiv({ cls: 'browser-bookmark-text-col' });
+		const title = textCol.createSpan({ cls: 'browser-bookmark-title' });
 		title.setText(node.title);
 		this.wireRename(title, node);
+
+		if (node.description) {
+			textCol.createDiv({ cls: 'browser-bookmark-description', text: node.description });
+		}
 
 		this.wireRowClick(row, () => this.openDefault(node));
 		row.addEventListener('contextmenu', (evt) => {
@@ -543,8 +552,8 @@ export class BookmarkListView extends ItemView {
 					this.app,
 					'Edit bookmark',
 					node,
-					({ title, url, iconType, iconValue }) => {
-						void this.store.updateBookmark(node.id, title, url, iconType, iconValue);
+					({ title, url, iconType, iconValue, description }) => {
+						void this.store.updateBookmark(node.id, title, url, { iconType, iconValue, description });
 					},
 					(url) => this.store.findByUrl(url, node.id)?.title
 				).open();
@@ -590,8 +599,8 @@ export class BookmarkListView extends ItemView {
 			this.app,
 			'New bookmark',
 			active ?? {},
-			({ title, url, iconType, iconValue }) => {
-				void this.store.addBookmark(title, url, parentId, iconType, iconValue);
+			({ title, url, iconType, iconValue, description }) => {
+				void this.store.addBookmark(title, url, parentId, { iconType, iconValue, description });
 			},
 			(url) => this.store.findByUrl(url)?.title
 		).open();

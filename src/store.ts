@@ -10,6 +10,13 @@ import {
 	PINNED_PARENT_ID,
 } from './types';
 
+/** The subset of a bookmark's fields the edit modal manages together. `openExternally` is deliberately excluded -- it's toggled independently via `toggleOpenExternally`, not part of this form. */
+export interface BookmarkEditableFields {
+	iconType?: BookmarkIconType;
+	iconValue?: string;
+	description?: string;
+}
+
 export class BookmarkStore {
 	private plugin: BrowserBookmarkPlugin;
 	private data: BrowserBookmarkData;
@@ -72,8 +79,7 @@ export class BookmarkStore {
 		title: string,
 		url: string,
 		parentId: string | null = null,
-		iconType?: BookmarkIconType,
-		iconValue?: string
+		fields: BookmarkEditableFields = {}
 	): Promise<TreeNode> {
 		const node: TreeNode = {
 			id: generateId(),
@@ -82,8 +88,9 @@ export class BookmarkStore {
 			url,
 			parentId,
 			order: this.nextOrder(parentId),
-			iconType,
-			iconValue,
+			iconType: fields.iconType,
+			iconValue: fields.iconValue,
+			description: fields.description,
 		};
 		this.data.items.push(node);
 		await this.save();
@@ -150,15 +157,15 @@ export class BookmarkStore {
 		id: string,
 		title: string,
 		url: string,
-		iconType?: BookmarkIconType,
-		iconValue?: string
+		fields: BookmarkEditableFields = {}
 	): Promise<void> {
 		const node = this.data.items.find((i) => i.id === id);
 		if (!node) return;
 		node.title = title;
 		node.url = url;
-		node.iconType = iconType;
-		node.iconValue = iconValue;
+		node.iconType = fields.iconType;
+		node.iconValue = fields.iconValue;
+		node.description = fields.description;
 		await this.save();
 		this.notify();
 	}

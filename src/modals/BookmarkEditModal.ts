@@ -6,11 +6,13 @@ interface BookmarkEditResult {
 	url: string;
 	iconType?: BookmarkIconType;
 	iconValue?: string;
+	description?: string;
 }
 
 export class BookmarkEditModal extends Modal {
 	private title_: string;
 	private url: string;
+	private description: string;
 	private iconType: BookmarkIconType | 'auto';
 	private iconValue: string;
 
@@ -25,6 +27,7 @@ export class BookmarkEditModal extends Modal {
 		super(app);
 		this.title_ = initial.title ?? '';
 		this.url = initial.url ?? '';
+		this.description = initial.description ?? '';
 		this.iconType = initial.iconType ?? 'auto';
 		this.iconValue = initial.iconValue ?? '';
 	}
@@ -41,6 +44,16 @@ export class BookmarkEditModal extends Modal {
 					.setPlaceholder('My bookmark')
 					.setValue(this.title_)
 					.onChange((value) => (this.title_ = value))
+			);
+
+		new Setting(contentEl)
+			.setName('Description')
+			.setDesc('Optional. Shown below the title in the sidebar, e.g. as a reminder of why you saved it.')
+			.addText((text) =>
+				text
+					.setPlaceholder('What this is for')
+					.setValue(this.description)
+					.onChange((value) => (this.description = value))
 			);
 
 		let updateWarning = () => {};
@@ -137,6 +150,7 @@ export class BookmarkEditModal extends Modal {
 					this.onSubmit({
 						title: trimmedTitle,
 						url: trimmedUrl,
+						description: this.description.trim() || undefined,
 						iconType: useCustomIcon ? (this.iconType as BookmarkIconType) : undefined,
 						iconValue: useCustomIcon ? trimmedIconValue : undefined,
 					});
