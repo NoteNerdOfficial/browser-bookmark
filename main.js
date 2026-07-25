@@ -1178,14 +1178,18 @@ var BookmarkListView = class extends import_obsidian6.ItemView {
       new import_obsidian6.Notice("Could not copy to clipboard.");
     }
   }
-  /** The default single-click/Enter/"Open" action -- respects `openExternally`, unlike the explicit split/window/system-browser menu items, which are always deliberate overrides. */
+  /**
+   * The default single-click/Enter/"Open" action -- respects `openExternally`,
+   * unlike the explicit split/window/system-browser menu items, which are
+   * always deliberate overrides. Re-focuses the sidebar afterward: opening a
+   * bookmark reveals its new Web Viewer leaf, which otherwise takes keyboard
+   * focus with it and leaves arrow-key navigation unable to reach the tree
+   * for the rest of the session.
+   */
   openDefault(node) {
     var _a, _b;
-    if (node.openExternally) {
-      void openInSystemBrowser((_a = node.url) != null ? _a : "");
-    } else {
-      void openBookmark(this.app, (_b = node.url) != null ? _b : "", this.store.settings.openIn);
-    }
+    const opened = node.openExternally ? openInSystemBrowser((_a = node.url) != null ? _a : "") : openBookmark(this.app, (_b = node.url) != null ? _b : "", this.store.settings.openIn);
+    void opened.then(() => this.treeEl.focus());
   }
   showBookmarkMenu(node, evt) {
     const menu = new import_obsidian6.Menu();

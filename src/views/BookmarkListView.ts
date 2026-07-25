@@ -487,13 +487,19 @@ export class BookmarkListView extends ItemView {
 		}
 	}
 
-	/** The default single-click/Enter/"Open" action -- respects `openExternally`, unlike the explicit split/window/system-browser menu items, which are always deliberate overrides. */
+	/**
+	 * The default single-click/Enter/"Open" action -- respects `openExternally`,
+	 * unlike the explicit split/window/system-browser menu items, which are
+	 * always deliberate overrides. Re-focuses the sidebar afterward: opening a
+	 * bookmark reveals its new Web Viewer leaf, which otherwise takes keyboard
+	 * focus with it and leaves arrow-key navigation unable to reach the tree
+	 * for the rest of the session.
+	 */
 	private openDefault(node: TreeNode): void {
-		if (node.openExternally) {
-			void openInSystemBrowser(node.url ?? '');
-		} else {
-			void openBookmark(this.app, node.url ?? '', this.store.settings.openIn);
-		}
+		const opened = node.openExternally
+			? openInSystemBrowser(node.url ?? '')
+			: openBookmark(this.app, node.url ?? '', this.store.settings.openIn);
+		void opened.then(() => this.treeEl.focus());
 	}
 
 	private showBookmarkMenu(node: TreeNode, evt: MouseEvent): void {
