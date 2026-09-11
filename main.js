@@ -34,7 +34,8 @@ var DEFAULT_SETTINGS = {
   openIn: "tab",
   interceptLinks: false,
   showFavicons: true,
-  showRibbonIcon: true
+  showRibbonIcon: true,
+  readLaterFolderName: "Read Later"
 };
 var DEFAULT_DATA = {
   items: [],
@@ -108,6 +109,18 @@ var BookmarkStore = class {
     await this.save();
     this.notify();
     return node;
+  }
+  /**
+   * Finds a root-level folder by exact title, creating it if missing. Used to
+   * land bookmarks saved from the companion browser extension in a
+   * consistent place (e.g. "Read Later") without the extension needing any
+   * visibility into the vault's folder tree.
+   */
+  async getOrCreateRootFolder(title) {
+    const existing = this.children(null).find((item) => item.type === "folder" && item.title === title);
+    if (existing)
+      return existing;
+    return this.addFolder(title, null);
   }
   async addFolder(title, parentId = null) {
     const node = {
@@ -1627,6 +1640,11 @@ var BrowserBookmarkSettingTab = class extends import_obsidian7.PluginSettingTab 
         name: "Show ribbon icon",
         desc: "Show a bookmark icon in the left ribbon to open the sidebar.",
         control: { type: "toggle", key: "showRibbonIcon" }
+      },
+      {
+        name: "Read later folder",
+        desc: "Root-level folder that bookmarks saved from the companion browser extension land in, created automatically on first save. Leave blank to save to the root instead.",
+        control: { type: "text", key: "readLaterFolderName", placeholder: "Read Later" }
       }
     ];
   }
@@ -1669,6 +1687,13 @@ var BrowserBookmarkSettingTab = class extends import_obsidian7.PluginSettingTab 
         this.plugin.updateRibbonIcon();
       })
     );
+    new import_obsidian7.Setting(containerEl).setName("Read later folder").setDesc(
+      "Root-level folder that bookmarks saved from the companion browser extension land in, created automatically on first save. Leave blank to save to the root instead."
+    ).addText(
+      (text) => text.setPlaceholder("Read Later").setValue(this.plugin.store.settings.readLaterFolderName).onChange(async (value) => {
+        await this.plugin.store.updateSettings({ readLaterFolderName: value });
+      })
+    );
   }
 };
 
@@ -1694,6 +1719,9 @@ var BrowserBookmarkPlugin = class extends import_obsidian8.Plugin {
       callback: () => this.bookmarkCurrentPage()
     });
     this.addSettingTab(new BrowserBookmarkSettingTab(this.app, this));
+    this.registerObsidianProtocolHandler("browser-bookmark-save", (params) => {
+      void this.saveFromBrowserExtension(params.url, params.title, params.description);
+    });
     this.registerDomEvent(
       document,
       "click",
@@ -1739,6 +1767,22 @@ var BrowserBookmarkPlugin = class extends import_obsidian8.Plugin {
         return (_a2 = this.store.findByUrl(url)) == null ? void 0 : _a2.title;
       }
     ).open();
+  }
+  /**
+   * Handles `obsidian://browser-bookmark-save` calls from the companion
+   * browser extension. `title`/`description` arrive URL-decoded already --
+   * Obsidian parses the protocol URI's query string before invoking the
+   * handler.
+   */
+  async saveFromBrowserExtension(url, title, description) {
+    if (!url)
+      return;
+    const folderName = this.store.settings.readLaterFolderName.trim();
+    const parentId = folderName ? (await this.store.getOrCreateRootFolder(folderName)).id : null;
+    const node = await this.store.addBookmark((title == null ? void 0 : title.trim()) || url, url, parentId, {
+      description: description || void 0
+    });
+    new import_obsidian8.Notice(`Saved to Browser Bookmark: ${node.title}`);
   }
   maybeInterceptLink(evt) {
     if (!this.store.settings.interceptLinks)

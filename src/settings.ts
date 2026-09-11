@@ -38,6 +38,12 @@ export class BrowserBookmarkSettingTab extends PluginSettingTab {
 				desc: 'Show a bookmark icon in the left ribbon to open the sidebar.',
 				control: { type: 'toggle', key: 'showRibbonIcon' },
 			},
+			{
+				name: 'Read later folder',
+				desc:
+					'Root-level folder that bookmarks saved from the companion browser extension land in, created automatically on first save. Leave blank to save to the root instead.',
+				control: { type: 'text', key: 'readLaterFolderName', placeholder: 'Read Later' },
+			},
 		];
 	}
 
@@ -101,6 +107,20 @@ export class BrowserBookmarkSettingTab extends PluginSettingTab {
 					await this.plugin.store.updateSettings({ showRibbonIcon: value });
 					this.plugin.updateRibbonIcon();
 				})
+			);
+
+		new Setting(containerEl)
+			.setName('Read later folder')
+			.setDesc(
+				'Root-level folder that bookmarks saved from the companion browser extension land in, created automatically on first save. Leave blank to save to the root instead.'
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder('Read Later')
+					.setValue(this.plugin.store.settings.readLaterFolderName)
+					.onChange(async (value) => {
+						await this.plugin.store.updateSettings({ readLaterFolderName: value });
+					})
 			);
 	}
 }

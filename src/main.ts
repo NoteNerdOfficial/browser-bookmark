@@ -1,4 +1,4 @@
-import { Plugin, WorkspaceLeaf } from 'obsidian';
+import { Notice, Plugin, WorkspaceLeaf } from 'obsidian';
 import { BookmarkStore } from './store';
 import { BookmarkListView } from './views/BookmarkListView';
 import { BrowserBookmarkSettingTab } from './settings';
@@ -31,6 +31,10 @@ export default class BrowserBookmarkPlugin extends Plugin {
 		});
 
 		this.addSettingTab(new BrowserBookmarkSettingTab(this.app, this));
+
+		this.registerObsidianProtocolHandler('browser-bookmark-save', (params) => {
+			void this.saveFromBrowserExtension(params.url, params.title, params.description);
+		});
 
 		this.registerDomEvent(
 			document,
@@ -77,6 +81,22 @@ export default class BrowserBookmarkPlugin extends Plugin {
 			},
 			(url) => this.store.findByUrl(url)?.title
 		).open();
+	}
+
+	/**
+	 * Handles `obsidian://browser-bookmark-save` calls from the companion
+	 * browser extension. `title`/`description` arrive URL-decoded already --
+	 * Obsidian parses the protocol URI's query string before invoking the
+	 * handler.
+	 */
+	private async saveFromBrowserExtension(url?: string, title?: string, description?: string): Promise<void> {
+		if (!url) return;
+		const folderName = this.store.settings.readLaterFolderName.trim();
+		const parentId = folderName ? (await this.store.getOrCreateRootFolder(folderName)).id : null;
+		const node = await this.store.addBookmark(title?.trim() || url, url, parentId, {
+			description: description || undefined,
+		});
+		new Notice(`Saved to Browser Bookmark: ${node.title}`);
 	}
 
 	private maybeInterceptLink(evt: MouseEvent): void {

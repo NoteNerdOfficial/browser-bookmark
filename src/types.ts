@@ -31,6 +31,8 @@ export interface BrowserBookmarkSettings {
 	interceptLinks: boolean;
 	showFavicons: boolean;
 	showRibbonIcon: boolean;
+	/** Root-level folder that bookmarks saved from the companion browser extension land in, auto-created on first save. Blank saves to the root instead. */
+	readLaterFolderName: string;
 }
 
 export interface BrowserBookmarkData {
@@ -43,6 +45,7 @@ export const DEFAULT_SETTINGS: BrowserBookmarkSettings = {
 	interceptLinks: false,
 	showFavicons: true,
 	showRibbonIcon: true,
+	readLaterFolderName: 'Read Later',
 };
 
 export const DEFAULT_DATA: BrowserBookmarkData = {

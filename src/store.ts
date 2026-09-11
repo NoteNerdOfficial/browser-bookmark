@@ -98,6 +98,18 @@ export class BookmarkStore {
 		return node;
 	}
 
+	/**
+	 * Finds a root-level folder by exact title, creating it if missing. Used to
+	 * land bookmarks saved from the companion browser extension in a
+	 * consistent place (e.g. "Read Later") without the extension needing any
+	 * visibility into the vault's folder tree.
+	 */
+	async getOrCreateRootFolder(title: string): Promise<TreeNode> {
+		const existing = this.children(null).find((item) => item.type === 'folder' && item.title === title);
+		if (existing) return existing;
+		return this.addFolder(title, null);
+	}
+
 	async addFolder(title: string, parentId: string | null = null): Promise<TreeNode> {
 		const node: TreeNode = {
 			id: generateId(),
