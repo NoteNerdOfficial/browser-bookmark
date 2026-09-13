@@ -91,6 +91,11 @@ export default class BrowserBookmarkPlugin extends Plugin {
 	 */
 	private async saveFromBrowserExtension(url?: string, title?: string, description?: string): Promise<void> {
 		if (!url) return;
+		const existing = this.store.findByUrl(url);
+		if (existing) {
+			new Notice(`Already saved: ${existing.title}`);
+			return;
+		}
 		const folderName = this.store.settings.readLaterFolderName.trim();
 		const parentId = folderName ? (await this.store.getOrCreateRootFolder(folderName)).id : null;
 		const node = await this.store.addBookmark(title?.trim() || url, url, parentId, {

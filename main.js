@@ -1777,6 +1777,11 @@ var BrowserBookmarkPlugin = class extends import_obsidian8.Plugin {
   async saveFromBrowserExtension(url, title, description) {
     if (!url)
       return;
+    const existing = this.store.findByUrl(url);
+    if (existing) {
+      new import_obsidian8.Notice(`Already saved: ${existing.title}`);
+      return;
+    }
     const folderName = this.store.settings.readLaterFolderName.trim();
     const parentId = folderName ? (await this.store.getOrCreateRootFolder(folderName)).id : null;
     const node = await this.store.addBookmark((title == null ? void 0 : title.trim()) || url, url, parentId, {
