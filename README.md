@@ -1,5 +1,11 @@
 # Browser Bookmark
 
+<p align="center">
+  <a href="https://github.com/NoteNerdOfficial/browser-bookmark/commits/main"><img src="https://img.shields.io/github/last-commit/NoteNerdOfficial/browser-bookmark?style=flat-square" alt="last commit"></a>
+  <a href="https://github.com/NoteNerdOfficial/browser-bookmark/releases/latest"><img src="https://img.shields.io/github/v/release/NoteNerdOfficial/browser-bookmark?style=flat-square&label=release" alt="release"></a>
+  <a href="https://obsidian.md/plugins?id=browser-bookmark"><img src="https://img.shields.io/badge/dynamic/json?style=flat-square&logo=obsidian&color=7C3AED&label=downloads&query=%24%5B%22browser-bookmark%22%5D.downloads&url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Fmaster%2Fcommunity-plugin-stats.json" alt="Obsidian downloads"></a>
+</p>
+
 An independent bookmarks sidebar for Obsidian that opens saved links in Obsidian's own built-in Web Viewer, so browsing stays inside the app instead of handing off to your system browser.
 
 ![Browser Bookmark sidebar: pinned row, folder tree, and a bookmark open in the Web Viewer](screenshots/demo.gif)
