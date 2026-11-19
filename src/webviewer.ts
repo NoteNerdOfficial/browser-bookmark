@@ -7,11 +7,33 @@ interface InternalPluginsWithWebViewer {
 	};
 }
 
-function isWebViewerAvailable(app: App): boolean {
+export function isWebViewerAvailable(app: App): boolean {
 	if (Platform.isMobile) return false;
 	const internalPlugins = (app as unknown as { internalPlugins?: InternalPluginsWithWebViewer })
 		.internalPlugins;
 	return internalPlugins?.plugins?.webviewer?.enabled === true;
+}
+
+interface AppWithSettings {
+	setting?: { open(): void; openTabById(id: string): unknown };
+}
+
+/**
+ * Opens Obsidian's Settings on the Core plugins tab, where Web Viewer is
+ * switched on. `app.setting` is undocumented, so this is defensive: returns
+ * false (instead of throwing) if the shape ever changes, so callers can fall
+ * back to telling the user where to look.
+ */
+export function openCorePluginSettings(app: App): boolean {
+	const setting = (app as unknown as AppWithSettings).setting;
+	if (!setting) return false;
+	try {
+		setting.open();
+		setting.openTabById('plugins');
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 /**

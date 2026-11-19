@@ -18,7 +18,7 @@ Obsidian already ships a Web Viewer core plugin for reading links without leavin
 
 ### Organizing bookmarks
 - **Folders**, nested to any depth, with drag-and-drop reordering and re-filing (drag onto a folder to move something into it, drag between rows to reorder).
-- **Search**: the search icon in the toolbar toggles a filter box; typing narrows the tree to matching bookmarks (title, URL, and description) and auto-expands any folder containing a match.
+- **Search**: the search icon in the toolbar toggles a filter box; typing narrows the tree to matching bookmarks (title, URL, and description) and auto-expands any folder containing a match. The ✕ button (or Escape) clears the query while keeping the box open; Escape on an empty box closes it.
 - **Keyboard navigation**: click a row to focus it, then Arrow keys move up/down, Right/Left expand/collapse folders, Enter opens or toggles, F2 renames, Delete removes.
 - **Real favicons** for every bookmark (with a plain globe icon fallback), toggleable in settings. Any bookmark's icon can also be overridden with a custom Lucide icon name or a custom image URL, with a live preview in the edit dialog.
 - **Optional descriptions**: add a short note to any bookmark and it shows below the title in a smaller, muted line, handy for remembering what a link was actually for.
@@ -29,7 +29,7 @@ Obsidian already ships a Web Viewer core plugin for reading links without leavin
 Right-click any bookmark → **Pin to top** to add it to a compact row of icon-only buttons above the tree (Arc-style). Drag to reorder; right-click → **Unpin** to send it back to the root of your tree. The row only appears once something's pinned; there's no empty placeholder.
 
 ### Opening bookmarks
-Every bookmark opens in Obsidian's Web Viewer, as a new tab, a split pane, or a new window (set the default in settings, or override per-click from the right-click menu). If the Web Viewer core plugin is off, unavailable, or you're on mobile, it falls back to your system browser automatically.
+Every bookmark opens in Obsidian's Web Viewer, as a new tab, a split pane, or a new window (set the default in settings, or override per-click from the right-click menu). If the Web Viewer core plugin is off, unavailable, or you're on mobile, it falls back to your system browser automatically. On desktop, a banner in the sidebar tells you when Web Viewer is off, with a shortcut to Settings → Core plugins (turn the banner off with **Don't show again** or in settings).
 
 For sites that don't render well in an embedded browser no matter what, the right-click menu also has:
 - **Open in system browser**: a one-off override that skips Web Viewer entirely for that click.
@@ -54,6 +54,8 @@ Importing gives you a preview first, showing bookmark/folder counts, an editable
 |---|---|
 | Open bookmarks in | Where a click opens the Web Viewer: new tab, split pane, or new window |
 | Intercept external links in notes | Route external link clicks in notes through the Web Viewer |
+| Row height | Compact, normal, or spacious spacing for bookmark and folder rows |
+| Warn when web viewer is off | Show a sidebar banner while the Web Viewer core plugin is off (desktop only) |
 | Show favicons | Turn off to always show a plain globe icon instead |
 | Show ribbon icon | Show/hide the ribbon icon that opens the sidebar |
 

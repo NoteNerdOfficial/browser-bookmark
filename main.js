@@ -35,6 +35,8 @@ var DEFAULT_SETTINGS = {
   interceptLinks: false,
   showFavicons: true,
   showRibbonIcon: true,
+  rowDensity: "normal",
+  warnWebViewerDisabled: true,
   readLaterFolderName: "Read Later"
 };
 var DEFAULT_DATA = {
@@ -272,6 +274,18 @@ function isWebViewerAvailable(app) {
     return false;
   const internalPlugins = app.internalPlugins;
   return ((_b = (_a = internalPlugins == null ? void 0 : internalPlugins.plugins) == null ? void 0 : _a.webviewer) == null ? void 0 : _b.enabled) === true;
+}
+function openCorePluginSettings(app) {
+  const setting = app.setting;
+  if (!setting)
+    return false;
+  try {
+    setting.open();
+    setting.openTabById("plugins");
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 async function openExternally(url) {
   if (import_obsidian.Platform.isDesktop) {
@@ -839,19 +853,26 @@ var BookmarkListView = class extends import_obsidian6.ItemView {
     this.makeIconButton(toolbar, "search", "Search", () => this.toggleSearch()).addClass(
       "browser-bookmark-search-toggle"
     );
+    this.webViewerBannerEl = container.createDiv({ cls: "browser-bookmark-banner" });
+    this.buildWebViewerBanner();
+    this.registerDomEvent(container, "mouseenter", () => this.updateWebViewerBanner());
+    this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.updateWebViewerBanner()));
     this.pinnedRowEl = container.createDiv({ cls: "browser-bookmark-pinned-row" });
     this.registerPinnedRowDropZone();
-    this.searchInputEl = container.createEl("input", {
-      cls: "browser-bookmark-search-input",
-      attr: { type: "text", placeholder: "Search bookmarks\u2026" }
-    });
-    this.searchInputEl.addEventListener("input", () => {
-      this.searchQuery = this.searchInputEl.value;
+    this.searchWrapperEl = container.createDiv({ cls: "browser-bookmark-search" });
+    this.search = new import_obsidian6.SearchComponent(this.searchWrapperEl).setPlaceholder("Search bookmarks\u2026").onChange((value) => {
+      this.searchQuery = value;
       this.render();
     });
-    this.searchInputEl.addEventListener("keydown", (evt) => {
-      if (evt.key === "Escape") {
-        evt.preventDefault();
+    this.search.clearButtonEl.addEventListener("click", () => this.search.inputEl.focus());
+    this.search.inputEl.addEventListener("keydown", (evt) => {
+      if (evt.key !== "Escape")
+        return;
+      evt.preventDefault();
+      if (this.search.getValue()) {
+        this.search.setValue("");
+        this.search.onChanged();
+      } else {
         this.toggleSearch(false);
       }
     });
@@ -861,13 +882,37 @@ var BookmarkListView = class extends import_obsidian6.ItemView {
     this.unsubscribe = this.store.onChange(() => this.render());
     this.render();
   }
+  buildWebViewerBanner() {
+    const el = this.webViewerBannerEl;
+    el.createDiv({
+      cls: "browser-bookmark-banner-text",
+      text: "Web viewer is turned off, so bookmarks open in your system browser."
+    });
+    const actions = el.createDiv({ cls: "browser-bookmark-banner-actions" });
+    const openBtn = actions.createEl("button", { cls: "mod-cta", text: "Open core plugins" });
+    openBtn.addEventListener("click", () => {
+      if (!openCorePluginSettings(this.app)) {
+        new import_obsidian6.Notice("Turn on web viewer in settings \u2192 core plugins.");
+      }
+    });
+    const dismissBtn = actions.createEl("button", { text: "Don't show again" });
+    dismissBtn.addEventListener("click", () => {
+      void this.store.updateSettings({ warnWebViewerDisabled: false });
+      new import_obsidian6.Notice("You can turn this warning back on in the plugin settings.");
+    });
+  }
+  /** Desktop only: Web Viewer doesn't exist on mobile, so the system browser is the only option there and there's nothing to warn about. */
+  updateWebViewerBanner() {
+    const show = import_obsidian6.Platform.isDesktop && this.store.settings.warnWebViewerDisabled && !isWebViewerAvailable(this.app);
+    this.webViewerBannerEl.toggleClass("is-visible", show);
+  }
   toggleSearch(forceOpen) {
     this.searchActive = forceOpen != null ? forceOpen : !this.searchActive;
-    this.searchInputEl.toggleClass("is-visible", this.searchActive);
+    this.searchWrapperEl.toggleClass("is-visible", this.searchActive);
     if (this.searchActive) {
-      this.searchInputEl.focus();
+      this.search.inputEl.focus();
     } else {
-      this.searchInputEl.value = "";
+      this.search.setValue("");
       this.searchQuery = "";
       this.render();
     }
@@ -890,6 +935,11 @@ var BookmarkListView = class extends import_obsidian6.ItemView {
     return this.store.children(node.id).some((child) => this.matchesQuery(child, query));
   }
   render() {
+    const density = this.store.settings.rowDensity;
+    for (const d of ["compact", "normal", "spacious"]) {
+      this.contentEl.toggleClass(`browser-bookmark-density-${d}`, d === density);
+    }
+    this.updateWebViewerBanner();
     this.renderPinnedRow();
     this.treeEl.empty();
     this.visibleOrder = [];
@@ -1632,6 +1682,20 @@ var BrowserBookmarkSettingTab = class extends import_obsidian7.PluginSettingTab 
         control: { type: "toggle", key: "interceptLinks" }
       },
       {
+        name: "Row height",
+        desc: "How much vertical space each bookmark and folder takes up in the sidebar.",
+        control: {
+          type: "dropdown",
+          key: "rowDensity",
+          options: { compact: "Compact", normal: "Normal", spacious: "Spacious" }
+        }
+      },
+      {
+        name: "Warn when web viewer is off",
+        desc: "Show a notice in the sidebar while the web viewer core plugin is turned off, since bookmarks then open in your system browser. Desktop only.",
+        control: { type: "toggle", key: "warnWebViewerDisabled" }
+      },
+      {
         name: "Show favicons",
         desc: "Fetch each bookmark's real site icon from Google's favicon service. Turn off to always show a plain globe icon instead (no requests sent for your bookmarked domains).",
         control: { type: "toggle", key: "showFavicons" }
@@ -1672,6 +1736,18 @@ var BrowserBookmarkSettingTab = class extends import_obsidian7.PluginSettingTab 
     new import_obsidian7.Setting(containerEl).setName("Intercept external links in notes").setDesc("Open external links clicked in your notes with the web viewer instead of your system browser.").addToggle(
       (toggle) => toggle.setValue(this.plugin.store.settings.interceptLinks).onChange(async (value) => {
         await this.plugin.store.updateSettings({ interceptLinks: value });
+      })
+    );
+    new import_obsidian7.Setting(containerEl).setName("Row height").setDesc("How much vertical space each bookmark and folder takes up in the sidebar.").addDropdown(
+      (dropdown) => dropdown.addOption("compact", "Compact").addOption("normal", "Normal").addOption("spacious", "Spacious").setValue(this.plugin.store.settings.rowDensity).onChange(async (value) => {
+        await this.plugin.store.updateSettings({ rowDensity: value });
+      })
+    );
+    new import_obsidian7.Setting(containerEl).setName("Warn when web viewer is off").setDesc(
+      "Show a notice in the sidebar while the web viewer core plugin is turned off, since bookmarks then open in your system browser. Desktop only."
+    ).addToggle(
+      (toggle) => toggle.setValue(this.plugin.store.settings.warnWebViewerDisabled).onChange(async (value) => {
+        await this.plugin.store.updateSettings({ warnWebViewerDisabled: value });
       })
     );
     new import_obsidian7.Setting(containerEl).setName("Show favicons").setDesc(

@@ -1,6 +1,6 @@
 import { App, PluginSettingTab, Setting, type SettingDefinitionItem } from 'obsidian';
 import type BrowserBookmarkPlugin from './main';
-import type { BrowserBookmarkSettings, PaneType } from './types';
+import type { BrowserBookmarkSettings, PaneType, RowDensity } from './types';
 
 export class BrowserBookmarkSettingTab extends PluginSettingTab {
 	plugin: BrowserBookmarkPlugin;
@@ -26,6 +26,20 @@ export class BrowserBookmarkSettingTab extends PluginSettingTab {
 				name: 'Intercept external links in notes',
 				desc: 'Open external links clicked in your notes with the web viewer instead of your system browser.',
 				control: { type: 'toggle', key: 'interceptLinks' },
+			},
+			{
+				name: 'Row height',
+				desc: 'How much vertical space each bookmark and folder takes up in the sidebar.',
+				control: {
+					type: 'dropdown',
+					key: 'rowDensity',
+					options: { compact: 'Compact', normal: 'Normal', spacious: 'Spacious' },
+				},
+			},
+			{
+				name: 'Warn when web viewer is off',
+				desc: 'Show a notice in the sidebar while the web viewer core plugin is turned off, since bookmarks then open in your system browser. Desktop only.',
+				control: { type: 'toggle', key: 'warnWebViewerDisabled' },
 			},
 			{
 				name: 'Show favicons',
@@ -85,6 +99,31 @@ export class BrowserBookmarkSettingTab extends PluginSettingTab {
 			.addToggle((toggle) =>
 				toggle.setValue(this.plugin.store.settings.interceptLinks).onChange(async (value) => {
 					await this.plugin.store.updateSettings({ interceptLinks: value });
+				})
+			);
+
+		new Setting(containerEl)
+			.setName('Row height')
+			.setDesc('How much vertical space each bookmark and folder takes up in the sidebar.')
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption('compact', 'Compact')
+					.addOption('normal', 'Normal')
+					.addOption('spacious', 'Spacious')
+					.setValue(this.plugin.store.settings.rowDensity)
+					.onChange(async (value) => {
+						await this.plugin.store.updateSettings({ rowDensity: value as RowDensity });
+					})
+			);
+
+		new Setting(containerEl)
+			.setName('Warn when web viewer is off')
+			.setDesc(
+				'Show a notice in the sidebar while the web viewer core plugin is turned off, since bookmarks then open in your system browser. Desktop only.'
+			)
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.store.settings.warnWebViewerDisabled).onChange(async (value) => {
+					await this.plugin.store.updateSettings({ warnWebViewerDisabled: value });
 				})
 			);
 

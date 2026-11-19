@@ -26,11 +26,17 @@ export interface TreeNode {
 
 export type PaneType = 'tab' | 'split' | 'window';
 
+/** Vertical spacing of bookmark and folder rows in the sidebar. */
+export type RowDensity = 'compact' | 'normal' | 'spacious';
+
 export interface BrowserBookmarkSettings {
 	openIn: PaneType;
 	interceptLinks: boolean;
 	showFavicons: boolean;
 	showRibbonIcon: boolean;
+	rowDensity: RowDensity;
+	/** Show a banner in the sidebar (desktop only) while the Web Viewer core plugin is off, since bookmarks then open in the system browser. */
+	warnWebViewerDisabled: boolean;
 	/** Root-level folder that bookmarks saved from the companion browser extension land in, auto-created on first save. Blank saves to the root instead. */
 	readLaterFolderName: string;
 }
@@ -45,6 +51,8 @@ export const DEFAULT_SETTINGS: BrowserBookmarkSettings = {
 	interceptLinks: false,
 	showFavicons: true,
 	showRibbonIcon: true,
+	rowDensity: 'normal',
+	warnWebViewerDisabled: true,
 	readLaterFolderName: 'Read Later',
 };
 

@@ -1,9 +1,9 @@
-import { ItemView, Menu, Notice, WorkspaceLeaf, setIcon } from 'obsidian';
+import { ItemView, Menu, Notice, Platform, SearchComponent, WorkspaceLeaf, setIcon } from 'obsidian';
 import type BrowserBookmarkPlugin from '../main';
 import type { BookmarkStore } from '../store';
 import type { TreeNode } from '../types';
 import { VIEW_TYPE_BROWSER_BOOKMARK, PINNED_PARENT_ID } from '../types';
-import { openBookmark, openInSystemBrowser } from '../webviewer';
+import { isWebViewerAvailable, openBookmark, openCorePluginSettings, openInSystemBrowser } from '../webviewer';
 import {
 	parseNetscapeHtml,
 	parseArcSidebarJson,
@@ -64,7 +64,9 @@ export class BookmarkListView extends ItemView {
 	private store: BookmarkStore;
 	private treeEl!: HTMLElement;
 	private pinnedRowEl!: HTMLElement;
-	private searchInputEl!: HTMLInputElement;
+	private webViewerBannerEl!: HTMLElement;
+	private searchWrapperEl!: HTMLElement;
+	private search!: SearchComponent;
 	private draggedId: string | null = null;
 	private dropMarkedEl: HTMLElement | null = null;
 	private unsubscribe: (() => void) | null = null;
@@ -103,20 +105,37 @@ export class BookmarkListView extends ItemView {
 			'browser-bookmark-search-toggle'
 		);
 
+		this.webViewerBannerEl = container.createDiv({ cls: 'browser-bookmark-banner' });
+		this.buildWebViewerBanner();
+		// Web Viewer can be switched on/off at any time and Obsidian fires no
+		// event for it, so re-check whenever the user is likely to look here:
+		// pointer coming back to the sidebar (e.g. after closing Settings) or
+		// a change of active pane.
+		this.registerDomEvent(container, 'mouseenter', () => this.updateWebViewerBanner());
+		this.registerEvent(this.app.workspace.on('active-leaf-change', () => this.updateWebViewerBanner()));
+
 		this.pinnedRowEl = container.createDiv({ cls: 'browser-bookmark-pinned-row' });
 		this.registerPinnedRowDropZone();
 
-		this.searchInputEl = container.createEl('input', {
-			cls: 'browser-bookmark-search-input',
-			attr: { type: 'text', placeholder: 'Search bookmarks…' },
-		});
-		this.searchInputEl.addEventListener('input', () => {
-			this.searchQuery = this.searchInputEl.value;
-			this.render();
-		});
-		this.searchInputEl.addEventListener('keydown', (evt) => {
-			if (evt.key === 'Escape') {
-				evt.preventDefault();
+		// Obsidian's own search box: brings the standard clear (X) button,
+		// which only shows while there's text and matches the app's styling.
+		this.searchWrapperEl = container.createDiv({ cls: 'browser-bookmark-search' });
+		this.search = new SearchComponent(this.searchWrapperEl)
+			.setPlaceholder('Search bookmarks…')
+			.onChange((value) => {
+				this.searchQuery = value;
+				this.render();
+			});
+		// Clearing should leave the field open and ready for a new query.
+		this.search.clearButtonEl.addEventListener('click', () => this.search.inputEl.focus());
+		this.search.inputEl.addEventListener('keydown', (evt) => {
+			if (evt.key !== 'Escape') return;
+			evt.preventDefault();
+			// First Escape clears the query; a second one closes the field.
+			if (this.search.getValue()) {
+				this.search.setValue('');
+				this.search.onChanged();
+			} else {
 				this.toggleSearch(false);
 			}
 		});
@@ -129,13 +148,40 @@ export class BookmarkListView extends ItemView {
 		this.render();
 	}
 
+	private buildWebViewerBanner(): void {
+		const el = this.webViewerBannerEl;
+		el.createDiv({
+			cls: 'browser-bookmark-banner-text',
+			text: "Web viewer is turned off, so bookmarks open in your system browser.",
+		});
+		const actions = el.createDiv({ cls: 'browser-bookmark-banner-actions' });
+		const openBtn = actions.createEl('button', { cls: 'mod-cta', text: 'Open core plugins' });
+		openBtn.addEventListener('click', () => {
+			if (!openCorePluginSettings(this.app)) {
+				new Notice('Turn on web viewer in settings → core plugins.');
+			}
+		});
+		const dismissBtn = actions.createEl('button', { text: "Don't show again" });
+		dismissBtn.addEventListener('click', () => {
+			void this.store.updateSettings({ warnWebViewerDisabled: false });
+			new Notice('You can turn this warning back on in the plugin settings.');
+		});
+	}
+
+	/** Desktop only: Web Viewer doesn't exist on mobile, so the system browser is the only option there and there's nothing to warn about. */
+	private updateWebViewerBanner(): void {
+		const show =
+			Platform.isDesktop && this.store.settings.warnWebViewerDisabled && !isWebViewerAvailable(this.app);
+		this.webViewerBannerEl.toggleClass('is-visible', show);
+	}
+
 	private toggleSearch(forceOpen?: boolean): void {
 		this.searchActive = forceOpen ?? !this.searchActive;
-		this.searchInputEl.toggleClass('is-visible', this.searchActive);
+		this.searchWrapperEl.toggleClass('is-visible', this.searchActive);
 		if (this.searchActive) {
-			this.searchInputEl.focus();
+			this.search.inputEl.focus();
 		} else {
-			this.searchInputEl.value = '';
+			this.search.setValue('');
 			this.searchQuery = '';
 			this.render();
 		}
@@ -169,6 +215,11 @@ export class BookmarkListView extends ItemView {
 	}
 
 	private render(): void {
+		const density = this.store.settings.rowDensity;
+		for (const d of ['compact', 'normal', 'spacious'] as const) {
+			this.contentEl.toggleClass(`browser-bookmark-density-${d}`, d === density);
+		}
+		this.updateWebViewerBanner();
 		this.renderPinnedRow();
 		this.treeEl.empty();
 		this.visibleOrder = [];
